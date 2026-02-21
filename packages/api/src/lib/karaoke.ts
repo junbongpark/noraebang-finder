@@ -77,7 +77,7 @@ async function fetchManana(
       });
       if (!res.ok) {
         if (attempt < maxRetries - 1) {
-          await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+          await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
           continue;
         }
         return [];
@@ -95,7 +95,7 @@ async function fetchManana(
       return entries;
     } catch {
       if (attempt < maxRetries - 1) {
-        await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+        await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
         continue;
       }
       return [];
@@ -151,20 +151,15 @@ async function lookupTrack(
     result.joysound = findBestMatch(track.title, track.artist, jsEntries);
   }
 
+  // Only try artist-based search if title search found SOME results
+  // (meaning the song exists in the DB but under a different artist)
+  // or if the artist has a known alias (e.g. BTS → 방탄소년단)
+  const hasAny = result.tj || result.ky || result.joysound;
   const hasMissing = () => !result.tj || !result.ky || !result.joysound;
+  const aliases = ARTIST_ALIASES[normArtist.toLowerCase()] ?? [];
 
-  // Retry with artist name
-  if (hasMissing() && normArtist) {
-    const artistEntries = await fetchManana(
-      `singer/${encodeURIComponent(normArtist)}.json`,
-      kv,
-    );
-    fillMissing(result, track, artistEntries);
-  }
-
-  // Try artist aliases
-  if (hasMissing() && normArtist) {
-    const aliases = ARTIST_ALIASES[normArtist.toLowerCase()] ?? [];
+  if (hasMissing() && normArtist && (hasAny || aliases.length > 0)) {
+    // Try alias first (more targeted)
     for (const alias of aliases) {
       if (!hasMissing()) break;
       const aliasEntries = await fetchManana(
@@ -172,6 +167,15 @@ async function lookupTrack(
         kv,
       );
       fillMissing(result, track, aliasEntries);
+    }
+
+    // Then try original artist name if still missing
+    if (hasMissing()) {
+      const artistEntries = await fetchManana(
+        `singer/${encodeURIComponent(normArtist)}.json`,
+        kv,
+      );
+      fillMissing(result, track, artistEntries);
     }
   }
 
