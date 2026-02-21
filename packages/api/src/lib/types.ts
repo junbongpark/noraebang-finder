@@ -43,8 +43,6 @@ export interface MananaEntry {
 }
 
 export type Env = {
-  SPOTIFY_CLIENT_ID: string;
-  SPOTIFY_CLIENT_SECRET: string;
   YOUTUBE_API_KEY: string;
   KARAOKE_CACHE: KVNamespace;
 };

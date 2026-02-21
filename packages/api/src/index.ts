@@ -27,17 +27,7 @@ app.post("/api/playlist", async (c) => {
 
     let result;
     if (parsed.platform === "spotify") {
-      if (!c.env.SPOTIFY_CLIENT_ID || !c.env.SPOTIFY_CLIENT_SECRET) {
-        return c.json(
-          { error: "Spotify API credentials not configured", code: "NO_CREDS" },
-          401,
-        );
-      }
-      result = await getSpotifyPlaylist(
-        parsed.playlistId,
-        c.env.SPOTIFY_CLIENT_ID,
-        c.env.SPOTIFY_CLIENT_SECRET,
-      );
+      result = await getSpotifyPlaylist(parsed.playlistId);
     } else {
       if (!c.env.YOUTUBE_API_KEY) {
         return c.json(

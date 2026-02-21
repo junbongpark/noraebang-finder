@@ -21,3 +21,4 @@ yarn-debug.log*
 # legacy next.js (to be removed)
 .next/
 next-env.d.ts
+packages/api/.dev.vars

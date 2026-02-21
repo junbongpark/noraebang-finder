@@ -1,78 +1,62 @@
-import { SPOTIFY_TOKEN_URL, SPOTIFY_API_URL } from "./constants";
 import { PlaylistTrack } from "./types";
 
-let cachedToken: { token: string; expiresAt: number } | null = null;
+// Extract tracks from Spotify's embed page — no API key needed.
+// The embed page includes __NEXT_DATA__ with the full track list.
 
-async function getAccessToken(
-  clientId: string,
-  clientSecret: string,
-): Promise<string> {
-  if (cachedToken && Date.now() < cachedToken.expiresAt) {
-    return cachedToken.token;
-  }
+interface EmbedTrack {
+  title: string;
+  subtitle: string;
+  uri: string;
+}
 
-  const res = await fetch(SPOTIFY_TOKEN_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Authorization: "Basic " + btoa(`${clientId}:${clientSecret}`),
-    },
-    body: "grant_type=client_credentials",
-  });
-
-  if (!res.ok) throw new Error(`Spotify auth failed: ${res.status}`);
-
-  const data: { access_token: string; expires_in: number } = await res.json();
-  cachedToken = {
-    token: data.access_token,
-    expiresAt: Date.now() + (data.expires_in - 60) * 1000,
+interface EmbedData {
+  props: {
+    pageProps: {
+      state: {
+        data: {
+          entity: {
+            name: string;
+            trackList: EmbedTrack[];
+          };
+        };
+      };
+    };
   };
-  return cachedToken.token;
 }
 
 export async function getSpotifyPlaylist(
   playlistId: string,
-  clientId: string,
-  clientSecret: string,
 ): Promise<{ name: string; tracks: PlaylistTrack[] }> {
-  const token = await getAccessToken(clientId, clientSecret);
+  const embedUrl = `https://open.spotify.com/embed/playlist/${playlistId}`;
+  const res = await fetch(embedUrl, {
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (compatible; NoraebangFinder/1.0)",
+    },
+  });
 
-  const metaRes = await fetch(
-    `${SPOTIFY_API_URL}/playlists/${playlistId}?fields=name`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  );
-  if (metaRes.status === 404) throw new Error("Playlist not found.");
-  if (metaRes.status === 403)
-    throw new Error("Playlist is private. Please make it public and try again.");
-  if (!metaRes.ok) throw new Error(`Spotify API error: ${metaRes.status}`);
-  const meta: { name: string } = await metaRes.json();
-
-  const tracks: PlaylistTrack[] = [];
-  let url: string | null =
-    `${SPOTIFY_API_URL}/playlists/${playlistId}/tracks?fields=items(track(name,artists(name))),next&limit=100`;
-
-  while (url) {
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) throw new Error(`Spotify API error: ${res.status}`);
-    const data: {
-      items: Array<{
-        track: { name: string; artists: Array<{ name: string }> } | null;
-      }>;
-      next: string | null;
-    } = await res.json();
-
-    for (const item of data.items) {
-      if (!item.track) continue;
-      tracks.push({
-        originalTitle: item.track.name,
-        title: item.track.name,
-        artist: item.track.artists.map((a) => a.name).join(", "),
-      });
-    }
-    url = data.next;
+  if (!res.ok) {
+    if (res.status === 404) throw new Error("Playlist not found.");
+    throw new Error(`Spotify error: ${res.status}`);
   }
 
-  return { name: meta.name, tracks };
+  const html = await res.text();
+
+  const match = html.match(
+    /<script\s+id="__NEXT_DATA__"\s+type="application\/json">(.*?)<\/script>/,
+  );
+  if (!match) {
+    throw new Error("Could not parse Spotify playlist data.");
+  }
+
+  const data: EmbedData = JSON.parse(match[1]);
+  const entity = data.props.pageProps.state.data.entity;
+
+  const tracks: PlaylistTrack[] = entity.trackList.map((t) => ({
+    originalTitle: t.title,
+    title: t.title,
+    artist: t.subtitle,
+  }));
+
+  return { name: entity.name, tracks };
 }
