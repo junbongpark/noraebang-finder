@@ -16,7 +16,7 @@ export default function App() {
       <main className="w-full max-w-4xl">
         <div className="mb-8 text-center">
           <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-white">
-            Karaoke Finder
+            Noraebang Finder
           </h1>
           <p className="mt-2 text-zinc-600 dark:text-zinc-400">
             Paste a playlist link, get karaoke numbers for TJ, KY, and Joysound

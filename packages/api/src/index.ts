@@ -11,7 +11,7 @@ const app = new Hono<{ Bindings: Env }>();
 
 app.use("*", cors());
 
-app.get("/", (c) => c.json({ status: "ok", service: "karaoke-api" }));
+app.get("/", (c) => c.json({ status: "ok", service: "noraebang-api" }));
 
 // Extract tracks from a playlist URL
 app.post("/api/playlist", async (c) => {
