@@ -1,0 +1,11 @@
+name = "karaoke-api"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+[vars]
+# Non-secret env vars go here (or use `wrangler secret put` for secrets)
+
+[[kv_namespaces]]
+binding = "KARAOKE_CACHE"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+preview_id = "REPLACE_WITH_PREVIEW_KV_NAMESPACE_ID"
