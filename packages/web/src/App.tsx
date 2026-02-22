@@ -36,7 +36,7 @@ export default function App() {
             Jpop 노래방 번호 찾기
           </h1>
           <p className="mt-2 text-zinc-400">
-            Kpop · Jpop 플레이리스트로 TJ/금영/Joysound 번호 한번에
+            Jpop 플레이리스트로 TJ/금영/Joysound 번호 한번에
           </p>
         </div>
 

@@ -275,7 +275,11 @@ export async function lookupKaraokeBatch(
 
           // Match all tracks from this artist against the catalog
           for (const idx of indices) {
-            results[idx] = matchFromEntries(tracks[idx], allEntries);
+            const result = matchFromEntries(tracks[idx], allEntries);
+            // Only mark as resolved if at least one brand matched
+            if (result.tj || result.ky || result.joysound) {
+              results[idx] = result;
+            }
           }
         }
       },
@@ -289,9 +293,8 @@ export async function lookupKaraokeBatch(
   const workers = Array.from({ length: KARAOKE_CONCURRENCY }, async () => {
     while (index < tracks.length) {
       const i = index++;
-      // Skip if already resolved by artist catalog in phase 1
       if (results[i]) {
-        // If phase 1 found some but not all brands, try title search to fill gaps
+        // Phase 1 found some brands; try title search to fill gaps
         const r = results[i];
         if (!r.tj || !r.ky || !r.joysound) {
           const normTitle = normalizeTitle(tracks[i].title);
@@ -303,6 +306,7 @@ export async function lookupKaraokeBatch(
         }
         continue;
       }
+      // Not resolved by artist catalog — full lookup by title + artist
       results[i] = await lookupTrack(tracks[i], cache, kv);
     }
   });
@@ -404,8 +408,11 @@ export async function lookupKaraokeStream(
 
           for (const idx of indices) {
             const result = matchFromEntries(tracks[idx], allEntries);
-            resolved.add(idx);
-            await onResult(idx, result);
+            // Only mark resolved if at least one brand matched
+            if (result.tj || result.ky || result.joysound) {
+              resolved.add(idx);
+              await onResult(idx, result);
+            }
           }
         }
       },
