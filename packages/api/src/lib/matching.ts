@@ -31,7 +31,7 @@ export function normalizeArtist(raw: string): string {
   return s;
 }
 
-function similarity(a: string, b: string): number {
+export function similarity(a: string, b: string): number {
   const la = a.toLowerCase();
   const lb = b.toLowerCase();
   if (la === lb) return 1;
