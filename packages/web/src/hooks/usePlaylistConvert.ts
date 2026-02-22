@@ -114,9 +114,13 @@ export function usePlaylistConvert() {
         const decoder = new TextDecoder();
         let buffer = "";
         let eventType = "";
+        const STREAM_TIMEOUT_MS = 30_000;
 
         while (true) {
-          const { done, value } = await reader.read();
+          const timeout = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("스트리밍 응답이 시간 초과되었습니다")), STREAM_TIMEOUT_MS),
+          );
+          const { done, value } = await Promise.race([reader.read(), timeout]);
           if (done) break;
           buffer += decoder.decode(value, { stream: true });
 

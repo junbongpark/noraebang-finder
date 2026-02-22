@@ -11,7 +11,7 @@ export default function HowItWorks() {
             플레이리스트 링크 복사
           </p>
           <p className="mt-0.5 text-xs text-zinc-500">
-            Spotify / YouTube Music
+            Spotify / YT Music / Apple
           </p>
         </div>
 

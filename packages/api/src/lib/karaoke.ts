@@ -157,9 +157,12 @@ function fillMissing(
     result.joysound = findBestMatch(track.title, track.artist, jsEntries);
 }
 
+const TJ_FALLBACK_MAX = 10;
+
 async function lookupTrack(
   track: PlaylistTrack,
   cache: FetchCache,
+  tjFallbackBudget: { remaining: number },
   kv?: KVNamespace,
 ): Promise<KaraokeResult> {
   const result: KaraokeResult = {
@@ -218,7 +221,8 @@ async function lookupTrack(
   }
 
   // Fallback: direct search on TJ website if Manana has no results
-  if (!result.tj) {
+  if (!result.tj && tjFallbackBudget.remaining > 0) {
+    tjFallbackBudget.remaining--;
     const tjResults = await searchTJ(normTitle);
     result.tj = matchDirect(track.title, track.artist, tjResults);
   }
@@ -231,6 +235,7 @@ export async function lookupKaraokeBatch(
   kv?: KVNamespace,
 ): Promise<KaraokeResult[]> {
   const cache = new FetchCache();
+  const tjFallbackBudget = { remaining: TJ_FALLBACK_MAX };
   const results: KaraokeResult[] = new Array(tracks.length);
 
   // Phase 1: Pre-fetch artist catalogs for artists with 2+ tracks
@@ -314,7 +319,7 @@ export async function lookupKaraokeBatch(
         continue;
       }
       // Not resolved by artist catalog — full lookup by title + artist
-      results[i] = await lookupTrack(tracks[i], cache, kv);
+      results[i] = await lookupTrack(tracks[i], cache, tjFallbackBudget, kv);
     }
   });
 
@@ -328,6 +333,7 @@ export async function lookupKaraokeStream(
   onResult: (index: number, result: KaraokeResult) => Promise<void>,
 ): Promise<void> {
   const cache = new FetchCache();
+  const tjFallbackBudget = { remaining: TJ_FALLBACK_MAX };
   const resolved = new Set<number>();
 
   // Phase A: Cache-only lookup (no network) — parallel KV lookups
@@ -438,7 +444,7 @@ export async function lookupKaraokeStream(
       const pos = index++;
       if (pos >= unresolvedIndices.length) break;
       const i = unresolvedIndices[pos];
-      const result = await lookupTrack(tracks[i], cache, kv);
+      const result = await lookupTrack(tracks[i], cache, tjFallbackBudget, kv);
       await onResult(i, result);
     }
   });

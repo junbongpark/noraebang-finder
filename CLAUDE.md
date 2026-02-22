@@ -7,8 +7,8 @@
 Monorepo with two packages:
 
 - **`packages/api`** — Cloudflare Workers + Hono API
-  - Playlist extraction (Spotify embed scraping, YouTube Data API)
-  - Karaoke number lookup via [Manana API](https://api.manana.kr)
+  - Playlist extraction (Spotify embed scraping, YouTube Music InnerTube, Apple Music HTML scraping — no API keys needed)
+  - Karaoke number lookup via [Manana API](https://api.manana.kr) + TJ direct search fallback
   - SSE streaming endpoint for real-time results
   - KV caching with 7-day TTL
   - Cron-based popular artist precaching
@@ -38,7 +38,10 @@ npm run dev                     # localhost:5173, proxies /api → :8787
 | `packages/api/src/lib/karaoke.ts` | Core matching logic, SSE streaming, caching |
 | `packages/api/src/lib/matching.ts` | Levenshtein similarity scoring |
 | `packages/api/src/lib/spotify.ts` | Spotify embed scraping (no API key needed) |
-| `packages/api/src/lib/youtube.ts` | YouTube Data API integration |
+| `packages/api/src/lib/youtube-music.ts` | YouTube Music InnerTube scraping (no API key needed) |
+| `packages/api/src/lib/apple-music.ts` | Apple Music HTML scraping (no API key needed) |
+| `packages/api/src/lib/direct-search.ts` | TJ direct website search fallback |
+| `packages/api/src/lib/url-parser.ts` | Playlist URL parsing and platform detection |
 | `packages/web/src/hooks/usePlaylistConvert.ts` | SSE stream consumption hook |
 | `packages/web/src/components/TrackRow.tsx` | Karaoke number cards (mobile-first) |
 
@@ -52,9 +55,10 @@ npm run dev                     # localhost:5173, proxies /api → :8787
 
 ## API Endpoints
 
-- `POST /api/playlist` — Extract tracks from Spotify/YouTube playlist URL
+- `POST /api/playlist` — Extract tracks from Spotify/YouTube Music/Apple Music playlist URL
 - `POST /api/karaoke` — Batch lookup (returns all at once)
 - `POST /api/karaoke/stream` — SSE streaming lookup (results one by one)
+- `GET /api/releases/recent` — This week's new TJ/KY releases
 
 ## Caching Strategy
 
@@ -66,5 +70,5 @@ npm run dev                     # localhost:5173, proxies /api → :8787
 
 - **API**: `cd packages/api && wrangler deploy`
 - **Web**: Auto-deployed to GitHub Pages on push to main
-- **Secrets**: `wrangler secret put YOUTUBE_API_KEY`
+- **No API keys needed** — all platform integrations use public scraping
 - **GitHub repo variable**: `VITE_API_URL` (Workers production URL)

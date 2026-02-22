@@ -55,47 +55,6 @@ function parseTJResults(html: string): DirectResult[] {
   return results;
 }
 
-/** Search Kumyoung (KY) via kygabang.com */
-export async function searchKY(query: string): Promise<DirectResult[]> {
-  if (query.length < 2) return [];
-  try {
-    const res = await fetch("https://kygabang.com/chart/search_list.php", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "User-Agent": "Mozilla/5.0 (compatible; NoraebangFinder/1.0)",
-      },
-      body: `mode=SongSearch&val=${encodeURIComponent(query)}`,
-    });
-    if (!res.ok) return [];
-    const html = await res.text();
-    return parseKYResults(html);
-  } catch {
-    return [];
-  }
-}
-
-function parseKYResults(html: string): DirectResult[] {
-  const results: DirectResult[] = [];
-  // KY format: <td class="search_col02">NUMBER</td><td class="search_col03">TITLE / ARTIST</td>
-  const rowRe = /<td class="search_col02">(\d+)<\/td>\s*<td class="search_col03">([\s\S]*?)<\/td>/g;
-  let match;
-  while ((match = rowRe.exec(html)) !== null) {
-    const raw = stripHtml(match[2]);
-    const slashIdx = raw.lastIndexOf(" / ");
-    if (slashIdx > 0) {
-      results.push({
-        no: match[1],
-        title: raw.slice(0, slashIdx).trim(),
-        singer: raw.slice(slashIdx + 3).trim(),
-      });
-    } else {
-      results.push({ no: match[1], title: raw, singer: "" });
-    }
-  }
-  return results;
-}
-
 function stripHtml(s: string): string {
   return s.replace(/<[^>]*>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#39;/g, "'").replace(/&quot;/g, '"').trim();
 }
