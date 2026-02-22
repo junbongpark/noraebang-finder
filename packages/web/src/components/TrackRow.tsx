@@ -24,9 +24,11 @@ function KaraokeBadge({
   }
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(match.no);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    try {
+      await navigator.clipboard.writeText(match.no);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch { /* clipboard unavailable */ }
   };
 
   return (
@@ -64,9 +66,11 @@ function KaraokeCard({
   }
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(match.no);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    try {
+      await navigator.clipboard.writeText(match.no);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch { /* clipboard unavailable */ }
   };
 
   return (

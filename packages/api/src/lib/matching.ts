@@ -2,6 +2,9 @@ import { distance } from "fastest-levenshtein";
 import { MananaEntry, KaraokeMatch } from "./types";
 import { MATCH_THRESHOLD } from "./constants";
 
+// Matches CJK Unified Ideographs, Hiragana, Katakana, Hangul
+const CJK_RE = /[\u3000-\u9fff\uac00-\ud7af\uff00-\uffef]/;
+
 export function normalizeTitle(raw: string): string {
   let s = raw;
   s = s.replace(
@@ -9,6 +12,12 @@ export function normalizeTitle(raw: string): string {
     "",
   );
   s = s.replace(/\s*\[.*?\]/g, "");
+  // YouTube Music often appends " - English Title" to CJK titles (e.g. "アイドル - Idol")
+  // Strip the English suffix if the part before the dash contains CJK characters
+  const dashIdx = s.indexOf(" - ");
+  if (dashIdx > 0 && CJK_RE.test(s.slice(0, dashIdx))) {
+    s = s.slice(0, dashIdx);
+  }
   s = s.replace(/\s+/g, " ").trim();
   s = s.normalize("NFC");
   return s;

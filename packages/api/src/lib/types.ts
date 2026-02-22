@@ -1,8 +1,10 @@
-export type Platform = "spotify" | "youtube";
+export type Platform = "spotify" | "youtube" | "youtube-music" | "apple";
 
 export interface ParsedPlaylistUrl {
   platform: Platform;
   playlistId: string;
+  spotifyType?: "playlist" | "album";
+  appleUrl?: string;
 }
 
 export interface PlaylistTrack {

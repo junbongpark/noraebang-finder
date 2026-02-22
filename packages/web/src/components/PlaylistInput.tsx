@@ -17,8 +17,10 @@ export default function PlaylistInput({ onSubmit, isLoading }: Props) {
     const pasted = e.clipboardData.getData("text");
     if (
       pasted.includes("spotify.com/playlist") ||
+      pasted.includes("spotify.com/album") ||
       pasted.includes("youtube.com/playlist") ||
-      pasted.includes("music.youtube.com/playlist")
+      pasted.includes("music.youtube.com/playlist") ||
+      pasted.includes("music.apple.com/")
     ) {
       setTimeout(() => onSubmit(pasted.trim()), 100);
     }
@@ -45,7 +47,7 @@ export default function PlaylistInput({ onSubmit, isLoading }: Props) {
         </button>
       </div>
       <p className="mt-2 text-sm text-zinc-400">
-        Spotify, YouTube Music 플레이리스트 지원
+        Spotify, YouTube Music, Apple Music 플레이리스트 지원
       </p>
     </form>
   );

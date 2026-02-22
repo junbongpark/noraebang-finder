@@ -314,52 +314,51 @@ export async function lookupKaraokeBatch(
 export async function lookupKaraokeStream(
   tracks: PlaylistTrack[],
   kv: KVNamespace | undefined,
-  onResult: (index: number, result: KaraokeResult) => void,
+  onResult: (index: number, result: KaraokeResult) => Promise<void>,
 ): Promise<void> {
   const cache = new FetchCache();
   const resolved = new Set<number>();
 
-  // Phase A: Cache-only lookup (no network)
+  // Phase A: Cache-only lookup (no network) — parallel KV lookups
   if (kv) {
-    for (let i = 0; i < tracks.length; i++) {
-      const normTitle = normalizeTitle(tracks[i].title);
-      const normArtist = normalizeArtist(tracks[i].artist);
+    await Promise.all(
+      tracks.map(async (track, i) => {
+        const normTitle = normalizeTitle(track.title);
+        const normArtist = normalizeArtist(track.artist);
 
-      const songKey = `manana:song/${encodeURIComponent(normTitle)}.json`;
-      const singerKey = `manana:singer/${encodeURIComponent(normArtist)}.json`;
+        const songKey = `manana:song/${encodeURIComponent(normTitle)}.json`;
+        const singerKey = `manana:singer/${encodeURIComponent(normArtist)}.json`;
 
-      const aliases = ARTIST_ALIASES[normArtist.toLowerCase()] ?? [];
-      const aliasKeys = aliases.map(
-        (a) => `manana:singer/${encodeURIComponent(a)}.json`,
-      );
+        const aliases = ARTIST_ALIASES[normArtist.toLowerCase()] ?? [];
+        const aliasKeys = aliases.map(
+          (a) => `manana:singer/${encodeURIComponent(a)}.json`,
+        );
 
-      let allEntries: MananaEntry[] = [];
+        const kvKeys = [songKey, singerKey, ...aliasKeys];
+        const kvResults = await Promise.all(
+          kvKeys.map(async (key) => {
+            try {
+              return await kv.get<MananaEntry[]>(key, "json");
+            } catch {
+              return null;
+            }
+          }),
+        );
 
-      try {
-        const cached = await kv.get<MananaEntry[]>(songKey, "json");
-        if (cached) allEntries = [...allEntries, ...cached];
-      } catch {}
-
-      try {
-        const cached = await kv.get<MananaEntry[]>(singerKey, "json");
-        if (cached) allEntries = [...allEntries, ...cached];
-      } catch {}
-
-      for (const ak of aliasKeys) {
-        try {
-          const cached = await kv.get<MananaEntry[]>(ak, "json");
-          if (cached) allEntries = [...allEntries, ...cached];
-        } catch {}
-      }
-
-      if (allEntries.length > 0) {
-        const result = matchFromEntries(tracks[i], allEntries);
-        if (result.tj || result.ky || result.joysound) {
-          resolved.add(i);
-          onResult(i, result);
+        const allEntries: MananaEntry[] = [];
+        for (const cached of kvResults) {
+          if (cached) allEntries.push(...cached);
         }
-      }
-    }
+
+        if (allEntries.length > 0) {
+          const result = matchFromEntries(track, allEntries);
+          if (result.tj || result.ky || result.joysound) {
+            resolved.add(i);
+            await onResult(i, result);
+          }
+        }
+      }),
+    );
   }
 
   // Phase B: Artist catalog fetch for artists with 2+ unresolved tracks
@@ -406,7 +405,7 @@ export async function lookupKaraokeStream(
           for (const idx of indices) {
             const result = matchFromEntries(tracks[idx], allEntries);
             resolved.add(idx);
-            onResult(idx, result);
+            await onResult(idx, result);
           }
         }
       },
@@ -426,7 +425,7 @@ export async function lookupKaraokeStream(
       if (pos >= unresolvedIndices.length) break;
       const i = unresolvedIndices[pos];
       const result = await lookupTrack(tracks[i], cache, kv);
-      onResult(i, result);
+      await onResult(i, result);
     }
   });
 

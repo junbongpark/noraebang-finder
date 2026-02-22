@@ -4,13 +4,29 @@ import { Env, PlaylistTrack, MananaEntry } from "./lib/types";
 import { parsePlaylistUrl } from "./lib/url-parser";
 import { getSpotifyPlaylist } from "./lib/spotify";
 import { getYouTubePlaylist } from "./lib/youtube";
+import { getYouTubeMusicPlaylist } from "./lib/youtube-music";
+import { getAppleMusicPlaylist } from "./lib/apple-music";
 import { lookupKaraokeBatch, lookupKaraokeStream, fetchMananaRaw } from "./lib/karaoke";
 import { streamSSE } from "hono/streaming";
 import { MAX_PLAYLIST_TRACKS } from "./lib/constants";
 
 const app = new Hono<{ Bindings: Env }>();
 
-app.use("*", cors());
+app.use(
+  "*",
+  cors({
+    origin: (origin) => {
+      if (!origin) return origin;
+      if (
+        origin.endsWith(".github.io") ||
+        origin.startsWith("http://localhost:")
+      ) {
+        return origin;
+      }
+      return null;
+    },
+  }),
+);
 
 app.get("/", (c) => c.json({ status: "ok", service: "noraebang-api" }));
 
@@ -27,8 +43,12 @@ app.post("/api/playlist", async (c) => {
     const parsed = parsePlaylistUrl(url);
 
     let result;
-    if (parsed.platform === "spotify") {
-      result = await getSpotifyPlaylist(parsed.playlistId);
+    if (parsed.platform === "apple") {
+      result = await getAppleMusicPlaylist(parsed.appleUrl!);
+    } else if (parsed.platform === "spotify") {
+      result = await getSpotifyPlaylist(parsed.playlistId, parsed.spotifyType);
+    } else if (parsed.platform === "youtube-music") {
+      result = await getYouTubeMusicPlaylist(parsed.playlistId);
     } else {
       if (!c.env.YOUTUBE_API_KEY) {
         return c.json(
@@ -62,7 +82,7 @@ app.post("/api/playlist", async (c) => {
 // Look up karaoke numbers for tracks
 app.post("/api/karaoke", async (c) => {
   try {
-    const body = await c.req.json<{ tracks?: PlaylistTrack[] }>();
+    const body = await c.req.json<{ tracks?: PlaylistTrack[]; noCache?: boolean }>();
     const tracks = body.tracks;
 
     if (!Array.isArray(tracks) || tracks.length === 0) {
@@ -70,7 +90,7 @@ app.post("/api/karaoke", async (c) => {
     }
 
     const limited = tracks.slice(0, MAX_PLAYLIST_TRACKS);
-    const kv = c.env.KARAOKE_CACHE;
+    const kv = body.noCache ? undefined : c.env.KARAOKE_CACHE;
     const results = await lookupKaraokeBatch(limited, kv);
 
     return c.json({ results });
@@ -83,7 +103,7 @@ app.post("/api/karaoke", async (c) => {
 // SSE streaming karaoke lookup
 app.post("/api/karaoke/stream", async (c) => {
   try {
-    const body = await c.req.json<{ tracks?: PlaylistTrack[] }>();
+    const body = await c.req.json<{ tracks?: PlaylistTrack[]; noCache?: boolean }>();
     const tracks = body.tracks;
 
     if (!Array.isArray(tracks) || tracks.length === 0) {
@@ -91,7 +111,7 @@ app.post("/api/karaoke/stream", async (c) => {
     }
 
     const limited = tracks.slice(0, MAX_PLAYLIST_TRACKS);
-    const kv = c.env.KARAOKE_CACHE;
+    const kv = body.noCache ? undefined : c.env.KARAOKE_CACHE;
 
     return streamSSE(c, async (stream) => {
       await stream.writeSSE({
@@ -99,22 +119,13 @@ app.post("/api/karaoke/stream", async (c) => {
         data: JSON.stringify({ total: limited.length }),
       });
 
-      let writePromise = Promise.resolve();
-      const enqueue = (fn: () => Promise<void>) => {
-        writePromise = writePromise.then(fn);
-      };
-
-      await lookupKaraokeStream(limited, kv, (index, result) => {
-        enqueue(async () => {
-          await stream.writeSSE({
-            event: "result",
-            data: JSON.stringify({ index, result }),
-            id: String(index),
-          });
+      await lookupKaraokeStream(limited, kv, async (index, result) => {
+        await stream.writeSSE({
+          event: "result",
+          data: JSON.stringify({ index, result }),
+          id: String(index),
         });
       });
-
-      await writePromise;
 
       await stream.writeSSE({
         event: "done",

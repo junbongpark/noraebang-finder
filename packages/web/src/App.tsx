@@ -1,8 +1,11 @@
+import { useState } from "react";
 import PlaylistInput from "./components/PlaylistInput";
 import TrackTable from "./components/TrackTable";
+import NumberListView from "./components/NumberListView";
 import ExportButton from "./components/ExportButton";
 import LoadingState from "./components/LoadingState";
 import ErrorBanner from "./components/ErrorBanner";
+import HowItWorks from "./components/HowItWorks";
 import { usePlaylistConvert } from "./hooks/usePlaylistConvert";
 import { KaraokeResult } from "./types";
 
@@ -18,6 +21,9 @@ export default function App() {
     convert,
     reset,
   } = usePlaylistConvert();
+
+  const [viewMode, setViewMode] = useState<"numbers" | "table">("numbers");
+  const [noCache, setNoCache] = useState(false);
 
   const isLoading = phase === "extracting" || phase === "streaming";
   const showResults =
@@ -35,7 +41,19 @@ export default function App() {
           </p>
         </div>
 
-        <PlaylistInput onSubmit={convert} isLoading={isLoading} />
+        <PlaylistInput onSubmit={(url) => convert(url, noCache)} isLoading={isLoading} />
+        {import.meta.env.DEV && (
+          <label className="mt-2 flex items-center gap-2 text-xs text-zinc-500">
+            <input
+              type="checkbox"
+              checked={noCache}
+              onChange={(e) => setNoCache(e.target.checked)}
+            />
+            캐시 무시 (dev)
+          </label>
+        )}
+
+        {phase === "idle" && <HowItWorks />}
 
         {phase === "error" && error && (
           <div className="mt-4">
@@ -63,20 +81,51 @@ export default function App() {
                   {playlistName}
                 </h2>
                 <p className="text-sm text-zinc-500">
-                  {platform === "spotify" ? "Spotify" : "YouTube"} &middot;{" "}
+                  {platform === "spotify" ? "Spotify" : platform === "apple" ? "Apple Music" : platform === "youtube-music" ? "YouTube Music" : "YouTube"} &middot;{" "}
                   {tracks.length}곡
                 </p>
               </div>
-              {phase === "done" && (
-                <ExportButton
-                  results={results.filter(
-                    (r): r is KaraokeResult => r !== null,
-                  )}
-                  playlistName={playlistName || "karaoke"}
-                />
-              )}
+              <div className="flex items-center gap-2">
+                {phase === "done" && (
+                  <ExportButton
+                    results={results.filter(
+                      (r): r is KaraokeResult => r !== null,
+                    )}
+                    playlistName={playlistName || "karaoke"}
+                  />
+                )}
+              </div>
             </div>
-            <TrackTable results={results} />
+
+            {/* View mode toggle */}
+            <div className="flex gap-1 rounded-lg bg-zinc-800/50 p-1">
+              <button
+                onClick={() => setViewMode("numbers")}
+                className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition ${
+                  viewMode === "numbers"
+                    ? "bg-zinc-700 text-white"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                번호 보기
+              </button>
+              <button
+                onClick={() => setViewMode("table")}
+                className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition ${
+                  viewMode === "table"
+                    ? "bg-zinc-700 text-white"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                전체 보기
+              </button>
+            </div>
+
+            {viewMode === "numbers" ? (
+              <NumberListView results={results} streaming={phase === "streaming"} />
+            ) : (
+              <TrackTable results={results} />
+            )}
           </div>
         )}
 

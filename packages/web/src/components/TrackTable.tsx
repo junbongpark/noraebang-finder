@@ -9,6 +9,8 @@ export default function TrackTable({ results }: Props) {
   const resolved = results.filter((r) => r !== null);
   const found = resolved.filter((r) => r.tj || r.ky || r.joysound).length;
 
+  const rows = results.map((r, i) => ({ result: r, index: i }));
+
   return (
     <div className="w-full">
       <p className="mb-3 text-sm text-zinc-400">
@@ -39,14 +41,14 @@ export default function TrackTable({ results }: Props) {
             </tr>
           </thead>
           <tbody>
-            {results.map((result, i) => (
-              <TrackRow key={i} index={i} result={result} />
+            {rows.map(({ result, index }) => (
+              <TrackRow key={index} index={index} result={result} />
             ))}
           </tbody>
         </table>
         <div className="sm:hidden">
-          {results.map((result, i) => (
-            <TrackRow key={i} index={i} result={result} />
+          {rows.map(({ result, index }) => (
+            <TrackRow key={index} index={index} result={result} />
           ))}
         </div>
       </div>

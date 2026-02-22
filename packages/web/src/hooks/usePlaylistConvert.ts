@@ -15,6 +15,8 @@ interface State {
   error: string | null;
 }
 
+const SESSION_KEY = "noraebang-results";
+
 const initialState: State = {
   phase: "idle",
   platform: null,
@@ -25,8 +27,24 @@ const initialState: State = {
   error: null,
 };
 
+function loadSession(): State {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    if (!raw) return initialState;
+    return JSON.parse(raw) as State;
+  } catch {
+    return initialState;
+  }
+}
+
+function saveSession(state: State) {
+  try {
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(state));
+  } catch { /* storage full or unavailable */ }
+}
+
 export function usePlaylistConvert() {
-  const [state, setState] = useState<State>(initialState);
+  const [state, setState] = useState<State>(loadSession);
 
   const resultsRef = useRef<(KaraokeResult | null)[]>([]);
   const completedRef = useRef(0);
@@ -44,7 +62,7 @@ export function usePlaylistConvert() {
   }, []);
 
   const convert = useCallback(
-    async (url: string) => {
+    async (url: string, noCache?: boolean) => {
       setState({ ...initialState, phase: "extracting" });
       resultsRef.current = [];
       completedRef.current = 0;
@@ -81,7 +99,7 @@ export function usePlaylistConvert() {
         const response = await fetch(`${API_BASE}/api/karaoke/stream`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tracks: playlistData.tracks }),
+          body: JSON.stringify({ tracks: playlistData.tracks, noCache }),
         });
 
         if (!response.ok) {
@@ -89,7 +107,10 @@ export function usePlaylistConvert() {
           throw new Error(err.error || "노래방 번호 검색에 실패했습니다");
         }
 
-        const reader = response.body!.getReader();
+        if (!response.body) {
+          throw new Error("스트리밍 응답을 읽을 수 없습니다");
+        }
+        const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
         let eventType = "";
@@ -106,7 +127,12 @@ export function usePlaylistConvert() {
             if (line.startsWith("event: ")) {
               eventType = line.slice(7).trim();
             } else if (line.startsWith("data: ")) {
-              const data = JSON.parse(line.slice(6));
+              let data: any;
+              try {
+                data = JSON.parse(line.slice(6));
+              } catch {
+                continue;
+              }
               if (eventType === "result") {
                 resultsRef.current[data.index] = data.result;
                 completedRef.current++;
@@ -114,7 +140,7 @@ export function usePlaylistConvert() {
 
                 const now = Date.now();
                 if (
-                  pendingCountRef.current >= 5 ||
+                  pendingCountRef.current >= 1 ||
                   now - lastFlushRef.current >= 200
                 ) {
                   flush();
@@ -126,15 +152,19 @@ export function usePlaylistConvert() {
                 }));
               } else if (eventType === "done") {
                 flush();
-                setState((prev) => ({
-                  ...prev,
-                  phase: "done",
-                  results: [...resultsRef.current],
-                  progress: {
-                    completed: completedRef.current,
-                    total: prev.progress.total,
-                  },
-                }));
+                setState((prev) => {
+                  const next = {
+                    ...prev,
+                    phase: "done" as const,
+                    results: [...resultsRef.current],
+                    progress: {
+                      completed: completedRef.current,
+                      total: prev.progress.total,
+                    },
+                  };
+                  saveSession(next);
+                  return next;
+                });
               }
             }
           }
@@ -143,12 +173,14 @@ export function usePlaylistConvert() {
         // Final flush in case stream ended without a done event
         setState((prev) => {
           if (prev.phase === "done") return prev;
-          return {
+          const next = {
             ...prev,
-            phase: "done",
+            phase: "done" as const,
             results: [...resultsRef.current],
             progress: { completed: completedRef.current, total: prev.progress.total },
           };
+          saveSession(next);
+          return next;
         });
       } catch (err) {
         setState((prev) => ({
@@ -163,6 +195,7 @@ export function usePlaylistConvert() {
   );
 
   const reset = useCallback(() => {
+    sessionStorage.removeItem(SESSION_KEY);
     setState(initialState);
   }, []);
 

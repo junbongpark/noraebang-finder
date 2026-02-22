@@ -26,8 +26,9 @@ interface EmbedData {
 
 export async function getSpotifyPlaylist(
   playlistId: string,
+  type: "playlist" | "album" = "playlist",
 ): Promise<{ name: string; tracks: PlaylistTrack[] }> {
-  const embedUrl = `https://open.spotify.com/embed/playlist/${playlistId}`;
+  const embedUrl = `https://open.spotify.com/embed/${type}/${playlistId}`;
   const res = await fetch(embedUrl, {
     headers: {
       "User-Agent":

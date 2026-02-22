@@ -34,9 +34,11 @@ export default function ExportButton({ results, playlistName }: Props) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(toClipboardText(results));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(toClipboardText(results));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* clipboard unavailable */ }
   };
 
   const handleDownload = () => {
