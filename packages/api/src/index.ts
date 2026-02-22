@@ -3,7 +3,6 @@ import { cors } from "hono/cors";
 import { Env, PlaylistTrack, MananaEntry } from "./lib/types";
 import { parsePlaylistUrl } from "./lib/url-parser";
 import { getSpotifyPlaylist } from "./lib/spotify";
-import { getYouTubePlaylist } from "./lib/youtube";
 import { getYouTubeMusicPlaylist } from "./lib/youtube-music";
 import { getAppleMusicPlaylist } from "./lib/apple-music";
 import { lookupKaraokeBatch, lookupKaraokeStream, fetchMananaRaw } from "./lib/karaoke";
@@ -47,16 +46,8 @@ app.post("/api/playlist", async (c) => {
       result = await getAppleMusicPlaylist(parsed.appleUrl!);
     } else if (parsed.platform === "spotify") {
       result = await getSpotifyPlaylist(parsed.playlistId, parsed.spotifyType);
-    } else if (parsed.platform === "youtube-music") {
-      result = await getYouTubeMusicPlaylist(parsed.playlistId);
     } else {
-      if (!c.env.YOUTUBE_API_KEY) {
-        return c.json(
-          { error: "YouTube API key not configured", code: "NO_CREDS" },
-          401,
-        );
-      }
-      result = await getYouTubePlaylist(parsed.playlistId, c.env.YOUTUBE_API_KEY);
+      result = await getYouTubeMusicPlaylist(parsed.playlistId);
     }
 
     if (result.tracks.length > MAX_PLAYLIST_TRACKS) {
@@ -82,7 +73,7 @@ app.post("/api/playlist", async (c) => {
 // Look up karaoke numbers for tracks
 app.post("/api/karaoke", async (c) => {
   try {
-    const body = await c.req.json<{ tracks?: PlaylistTrack[]; noCache?: boolean }>();
+    const body = await c.req.json<{ tracks?: PlaylistTrack[] }>();
     const tracks = body.tracks;
 
     if (!Array.isArray(tracks) || tracks.length === 0) {
@@ -90,8 +81,7 @@ app.post("/api/karaoke", async (c) => {
     }
 
     const limited = tracks.slice(0, MAX_PLAYLIST_TRACKS);
-    const kv = body.noCache ? undefined : c.env.KARAOKE_CACHE;
-    const results = await lookupKaraokeBatch(limited, kv);
+    const results = await lookupKaraokeBatch(limited, c.env.KARAOKE_CACHE);
 
     return c.json({ results });
   } catch (e) {
@@ -103,7 +93,7 @@ app.post("/api/karaoke", async (c) => {
 // SSE streaming karaoke lookup
 app.post("/api/karaoke/stream", async (c) => {
   try {
-    const body = await c.req.json<{ tracks?: PlaylistTrack[]; noCache?: boolean }>();
+    const body = await c.req.json<{ tracks?: PlaylistTrack[] }>();
     const tracks = body.tracks;
 
     if (!Array.isArray(tracks) || tracks.length === 0) {
@@ -111,7 +101,7 @@ app.post("/api/karaoke/stream", async (c) => {
     }
 
     const limited = tracks.slice(0, MAX_PLAYLIST_TRACKS);
-    const kv = body.noCache ? undefined : c.env.KARAOKE_CACHE;
+    const kv = c.env.KARAOKE_CACHE;
 
     return streamSSE(c, async (stream) => {
       await stream.writeSSE({

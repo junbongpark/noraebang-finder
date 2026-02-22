@@ -1,4 +1,4 @@
-export type Platform = "spotify" | "youtube" | "youtube-music" | "apple";
+export type Platform = "spotify" | "youtube-music" | "apple";
 
 export interface ParsedPlaylistUrl {
   platform: Platform;
@@ -45,6 +45,5 @@ export interface MananaEntry {
 }
 
 export type Env = {
-  YOUTUBE_API_KEY: string;
   KARAOKE_CACHE: KVNamespace;
 };

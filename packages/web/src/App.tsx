@@ -23,8 +23,6 @@ export default function App() {
   } = usePlaylistConvert();
 
   const [viewMode, setViewMode] = useState<"numbers" | "table">("numbers");
-  const [noCache, setNoCache] = useState(false);
-
   const isLoading = phase === "extracting" || phase === "streaming";
   const showResults =
     (phase === "streaming" || phase === "done") && results.length > 0;
@@ -41,17 +39,7 @@ export default function App() {
           </p>
         </div>
 
-        <PlaylistInput onSubmit={(url) => convert(url, noCache)} isLoading={isLoading} />
-        {import.meta.env.DEV && (
-          <label className="mt-2 flex items-center gap-2 text-xs text-zinc-500">
-            <input
-              type="checkbox"
-              checked={noCache}
-              onChange={(e) => setNoCache(e.target.checked)}
-            />
-            캐시 무시 (dev)
-          </label>
-        )}
+        <PlaylistInput onSubmit={(url) => convert(url)} isLoading={isLoading} />
 
         {phase === "idle" && <HowItWorks />}
 
@@ -81,7 +69,7 @@ export default function App() {
                   {playlistName}
                 </h2>
                 <p className="text-sm text-zinc-500">
-                  {platform === "spotify" ? "Spotify" : platform === "apple" ? "Apple Music" : platform === "youtube-music" ? "YouTube Music" : "YouTube"} &middot;{" "}
+                  {platform === "spotify" ? "Spotify" : platform === "apple" ? "Apple Music" : "YouTube Music"} &middot;{" "}
                   {tracks.length}곡
                 </p>
               </div>

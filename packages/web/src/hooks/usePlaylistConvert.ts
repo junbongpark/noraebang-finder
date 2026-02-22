@@ -62,7 +62,7 @@ export function usePlaylistConvert() {
   }, []);
 
   const convert = useCallback(
-    async (url: string, noCache?: boolean) => {
+    async (url: string) => {
       setState({ ...initialState, phase: "extracting" });
       resultsRef.current = [];
       completedRef.current = 0;
@@ -99,7 +99,7 @@ export function usePlaylistConvert() {
         const response = await fetch(`${API_BASE}/api/karaoke/stream`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tracks: playlistData.tracks, noCache }),
+          body: JSON.stringify({ tracks: playlistData.tracks }),
         });
 
         if (!response.ok) {
