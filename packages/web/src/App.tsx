@@ -6,6 +6,7 @@ import ExportButton from "./components/ExportButton";
 import LoadingState from "./components/LoadingState";
 import ErrorBanner from "./components/ErrorBanner";
 import HowItWorks from "./components/HowItWorks";
+import NewReleases from "./components/NewReleases";
 import { usePlaylistConvert } from "./hooks/usePlaylistConvert";
 import { KaraokeResult } from "./types";
 
@@ -41,7 +42,12 @@ export default function App() {
 
         <PlaylistInput onSubmit={(url) => convert(url)} isLoading={isLoading} />
 
-        {phase === "idle" && <HowItWorks />}
+        {phase === "idle" && (
+          <>
+            <HowItWorks />
+            <NewReleases />
+          </>
+        )}
 
         {phase === "error" && error && (
           <div className="mt-4">

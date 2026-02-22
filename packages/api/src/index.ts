@@ -128,6 +128,48 @@ app.post("/api/karaoke/stream", async (c) => {
   }
 });
 
+// Recent releases (last 7 days, TJ + KY only)
+app.get("/api/releases/recent", async (c) => {
+  try {
+    const kv = c.env.KARAOKE_CACHE;
+    const now = new Date();
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    // Fetch current month
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, "0");
+    let entries = await fetchMananaRaw(`release/${yyyy}${mm}.json`, kv);
+
+    // Also fetch previous month if we're in the first week
+    if (now.getDate() <= 7) {
+      const prev = new Date(yyyy, now.getMonth() - 1, 1);
+      const prevYyyy = prev.getFullYear();
+      const prevMm = String(prev.getMonth() + 1).padStart(2, "0");
+      const prevEntries = await fetchMananaRaw(
+        `release/${prevYyyy}${prevMm}.json`,
+        kv,
+      );
+      entries = [...prevEntries, ...entries];
+    }
+
+    const releases = entries
+      .filter((e: MananaEntry) => {
+        if (e.brand !== "tj" && e.brand !== "kumyoung") return false;
+        const d = new Date(e.release);
+        return d >= sevenDaysAgo && d <= now;
+      })
+      .sort((a: MananaEntry, b: MananaEntry) =>
+        b.release.localeCompare(a.release),
+      )
+      .slice(0, 50);
+
+    return c.json({ releases });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Unknown error";
+    return c.json({ error: message, code: "RELEASE_ERROR" }, 500);
+  }
+});
+
 const POPULAR_ARTISTS = [
   // Kpop
   "방탄소년단", "블랙핑크", "트와이스", "아이유", "에스파",
