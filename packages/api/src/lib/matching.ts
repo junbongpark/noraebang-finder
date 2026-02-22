@@ -40,6 +40,18 @@ export function similarity(a: string, b: string): number {
   return 1 - distance(la, lb) / maxLen;
 }
 
+/** Check if a string is primarily Latin (ASCII letters) */
+function isLatin(s: string): boolean {
+  const letters = s.replace(/[\s\d\W]/g, "");
+  if (!letters) return false;
+  return /^[a-zA-Z]+$/.test(letters);
+}
+
+/** Check if a string contains CJK characters */
+function isCJK(s: string): boolean {
+  return CJK_RE.test(s);
+}
+
 export function findBestMatch(
   title: string,
   artist: string,
@@ -48,22 +60,39 @@ export function findBestMatch(
   const normTitle = normalizeTitle(title).toLowerCase();
   const normArtist = normalizeArtist(artist).toLowerCase();
 
+  // Detect cross-script artist comparison (e.g. "rokudenashi" vs "ロクデナシ")
+  const artistIsLatin = isLatin(normArtist);
+  const artistIsCJK = isCJK(normArtist);
+
   let bestMatch: KaraokeMatch | null = null;
   let bestScore = 0;
+  let secondBestScore = 0;
 
   for (const entry of candidates) {
     const entryTitle = entry.title.normalize("NFC").toLowerCase();
     const entrySinger = entry.singer.normalize("NFC").toLowerCase();
 
     const titleScore = similarity(normTitle, entryTitle);
-    const artistScore = normArtist
-      ? similarity(normArtist, entrySinger)
-      : 0.5;
+    let artistScore: number;
+
+    if (!normArtist) {
+      artistScore = 0.5;
+    } else {
+      // If one is Latin and the other is CJK, Levenshtein is meaningless
+      const singerIsLatin = isLatin(entrySinger);
+      const singerIsCJK = isCJK(entrySinger);
+      const crossScript =
+        (artistIsLatin && singerIsCJK) || (artistIsCJK && singerIsLatin);
+
+      artistScore = crossScript ? 0 : similarity(normArtist, entrySinger);
+    }
+
     const combined = normArtist
       ? 0.6 * titleScore + 0.4 * artistScore
       : titleScore;
 
     if (combined > bestScore) {
+      secondBestScore = bestScore;
       bestScore = combined;
       bestMatch = {
         no: entry.no,
@@ -71,11 +100,26 @@ export function findBestMatch(
         matchedSinger: entry.singer,
         score: combined,
       };
+    } else if (combined > secondBestScore) {
+      secondBestScore = combined;
     }
   }
 
-  if (bestMatch && bestScore >= MATCH_THRESHOLD) {
-    return bestMatch;
+  if (!bestMatch || bestScore < MATCH_THRESHOLD) return null;
+
+  // If artist score was meaningful (same script), accept
+  // If cross-script but only one candidate with high title score, accept
+  // If cross-script and multiple candidates tie (within 0.05), reject — ambiguous
+  if (secondBestScore > 0 && bestScore - secondBestScore < 0.05) {
+    // Multiple candidates with essentially the same score — ambiguous match
+    // Only reject if artist matching was cross-script (couldn't differentiate)
+    const matchSinger = bestMatch.matchedSinger.toLowerCase();
+    const singerIsLatin = isLatin(matchSinger);
+    const singerIsCJK = isCJK(matchSinger);
+    const crossScript =
+      (artistIsLatin && singerIsCJK) || (artistIsCJK && singerIsLatin);
+    if (crossScript) return null;
   }
-  return null;
+
+  return bestMatch;
 }

@@ -5,7 +5,7 @@ import {
 } from "./constants";
 import { MananaEntry, KaraokeResult, PlaylistTrack } from "./types";
 import { normalizeTitle, normalizeArtist, findBestMatch } from "./matching";
-import { searchTJ, searchKY, matchDirect } from "./direct-search";
+import { searchTJ, matchDirect } from "./direct-search";
 
 const ARTIST_ALIASES: Record<string, string[]> = {
   bts: ["방탄소년단"],
@@ -217,14 +217,10 @@ async function lookupTrack(
     }
   }
 
-  // Fallback: direct search on TJ/KY websites if Manana has no results
-  if (!result.tj || !result.ky) {
-    const [tjResults, kyResults] = await Promise.all([
-      !result.tj ? searchTJ(normTitle) : Promise.resolve([]),
-      !result.ky ? searchKY(normTitle) : Promise.resolve([]),
-    ]);
-    if (!result.tj) result.tj = matchDirect(track.title, track.artist, tjResults);
-    if (!result.ky) result.ky = matchDirect(track.title, track.artist, kyResults);
+  // Fallback: direct search on TJ website if Manana has no results
+  if (!result.tj) {
+    const tjResults = await searchTJ(normTitle);
+    result.tj = matchDirect(track.title, track.artist, tjResults);
   }
 
   return result;
