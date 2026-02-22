@@ -7,8 +7,8 @@ compatibility_date = "2024-12-01"
 
 [[kv_namespaces]]
 binding = "KARAOKE_CACHE"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
-preview_id = "REPLACE_WITH_PREVIEW_KV_NAMESPACE_ID"
+id = "6346956c92ad4d598b52962436ac1bda"
+preview_id = "c2b6f8e30bd84d59b29d525bb76f39e9"
 
 [triggers]
 crons = ["0 3 * * *"]
