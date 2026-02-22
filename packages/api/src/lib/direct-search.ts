@@ -22,7 +22,7 @@ export async function searchTJ(query: string): Promise<DirectResult[]> {
   }
 }
 
-function parseTJResults(html: string): DirectResult[] {
+export function parseTJResults(html: string): DirectResult[] {
   const results: DirectResult[] = [];
   // Each result block: <span class="num2">NUMBER</span> ... title3 ... title4
   const blockRe = /<li[^>]*class="grid-item num2"[^>]*>[\s\S]*?<span[^>]*>(\d+)<\/span>[\s\S]*?<li[^>]*class="grid-item title3"[^>]*>[\s\S]*?<p><span>([\s\S]*?)<\/span><\/p>[\s\S]*?<li[^>]*class="grid-item title4[^"]*"[^>]*>[\s\S]*?<p><span>([\s\S]*?)<\/span><\/p>/g;

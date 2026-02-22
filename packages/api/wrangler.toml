@@ -10,5 +10,10 @@ binding = "KARAOKE_CACHE"
 id = "6346956c92ad4d598b52962436ac1bda"
 preview_id = "c2b6f8e30bd84d59b29d525bb76f39e9"
 
+[[d1_databases]]
+binding = "TJ_DB"
+database_name = "tj-songs"
+database_id = "866487d5-6097-4bc3-94c2-5fa3b4972a03"
+
 [triggers]
 crons = ["0 3 * * *"]

@@ -46,4 +46,5 @@ export interface MananaEntry {
 
 export type Env = {
   KARAOKE_CACHE: KVNamespace;
+  TJ_DB: D1Database;
 };

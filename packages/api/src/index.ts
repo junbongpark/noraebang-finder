@@ -6,6 +6,7 @@ import { getSpotifyPlaylist } from "./lib/spotify";
 import { getYouTubeMusicPlaylist } from "./lib/youtube-music";
 import { getAppleMusicPlaylist } from "./lib/apple-music";
 import { lookupKaraokeBatch, lookupKaraokeStream, fetchMananaRaw } from "./lib/karaoke";
+import { crawlTJ } from "./lib/tj-crawler";
 import { streamSSE } from "hono/streaming";
 import { MAX_PLAYLIST_TRACKS } from "./lib/constants";
 
@@ -81,7 +82,7 @@ app.post("/api/karaoke", async (c) => {
     }
 
     const limited = tracks.slice(0, MAX_PLAYLIST_TRACKS);
-    const results = await lookupKaraokeBatch(limited, c.env.KARAOKE_CACHE);
+    const results = await lookupKaraokeBatch(limited, c.env.KARAOKE_CACHE, c.env.TJ_DB);
 
     return c.json({ results });
   } catch (e) {
@@ -102,6 +103,7 @@ app.post("/api/karaoke/stream", async (c) => {
 
     const limited = tracks.slice(0, MAX_PLAYLIST_TRACKS);
     const kv = c.env.KARAOKE_CACHE;
+    const db = c.env.TJ_DB;
 
     return streamSSE(c, async (stream) => {
       await stream.writeSSE({
@@ -115,7 +117,7 @@ app.post("/api/karaoke/stream", async (c) => {
           data: JSON.stringify({ index, result }),
           id: String(index),
         });
-      });
+      }, db);
 
       await stream.writeSSE({
         event: "done",
@@ -198,6 +200,11 @@ export default {
   ) => {
     const kv = env.KARAOKE_CACHE;
     if (!kv) return;
+
+    // Crawl TJ website and populate D1 database
+    if (env.TJ_DB) {
+      await crawlTJ(env.TJ_DB, kv);
+    }
 
     const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 

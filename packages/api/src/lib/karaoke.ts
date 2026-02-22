@@ -6,6 +6,7 @@ import {
 import { MananaEntry, KaraokeResult, PlaylistTrack } from "./types";
 import { normalizeTitle, normalizeArtist, findBestMatch } from "./matching";
 import { searchTJ, matchDirect } from "./direct-search";
+import { searchTJFromDB, saveTJResults } from "./tj-db";
 
 const ARTIST_ALIASES: Record<string, string[]> = {
   bts: ["방탄소년단"],
@@ -164,6 +165,7 @@ async function lookupTrack(
   cache: FetchCache,
   tjFallbackBudget: { remaining: number },
   kv?: KVNamespace,
+  db?: D1Database,
 ): Promise<KaraokeResult> {
   const result: KaraokeResult = {
     title: track.title,
@@ -220,11 +222,20 @@ async function lookupTrack(
     }
   }
 
-  // Fallback: direct search on TJ website if Manana has no results
+  // Fallback 1: D1 database lookup
+  if (!result.tj && db) {
+    result.tj = await searchTJFromDB(db, normTitle, track.artist);
+  }
+
+  // Fallback 2: direct search on TJ website if D1 also has no results
   if (!result.tj && tjFallbackBudget.remaining > 0) {
     tjFallbackBudget.remaining--;
     const tjResults = await searchTJ(normTitle);
     result.tj = matchDirect(track.title, track.artist, tjResults);
+    // Save scraped results to D1 for future lookups
+    if (tjResults.length > 0 && db) {
+      saveTJResults(db, tjResults).catch(() => {});
+    }
   }
 
   return result;
@@ -233,6 +244,7 @@ async function lookupTrack(
 export async function lookupKaraokeBatch(
   tracks: PlaylistTrack[],
   kv?: KVNamespace,
+  db?: D1Database,
 ): Promise<KaraokeResult[]> {
   const cache = new FetchCache();
   const tjFallbackBudget = { remaining: TJ_FALLBACK_MAX };
@@ -319,7 +331,7 @@ export async function lookupKaraokeBatch(
         continue;
       }
       // Not resolved by artist catalog — full lookup by title + artist
-      results[i] = await lookupTrack(tracks[i], cache, tjFallbackBudget, kv);
+      results[i] = await lookupTrack(tracks[i], cache, tjFallbackBudget, kv, db);
     }
   });
 
@@ -331,6 +343,7 @@ export async function lookupKaraokeStream(
   tracks: PlaylistTrack[],
   kv: KVNamespace | undefined,
   onResult: (index: number, result: KaraokeResult) => Promise<void>,
+  db?: D1Database,
 ): Promise<void> {
   const cache = new FetchCache();
   const tjFallbackBudget = { remaining: TJ_FALLBACK_MAX };
@@ -444,7 +457,7 @@ export async function lookupKaraokeStream(
       const pos = index++;
       if (pos >= unresolvedIndices.length) break;
       const i = unresolvedIndices[pos];
-      const result = await lookupTrack(tracks[i], cache, tjFallbackBudget, kv);
+      const result = await lookupTrack(tracks[i], cache, tjFallbackBudget, kv, db);
       await onResult(i, result);
     }
   });
