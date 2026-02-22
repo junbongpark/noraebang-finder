@@ -51,7 +51,20 @@ const ARTIST_ALIASES: Record<string, string[]> = {
   hwasa: ["화사"],
 };
 
-async function fetchManana(
+/** In-memory dedup cache for a single batch run */
+class FetchCache {
+  private inflight = new Map<string, Promise<MananaEntry[]>>();
+
+  fetch(path: string, kv?: KVNamespace): Promise<MananaEntry[]> {
+    const existing = this.inflight.get(path);
+    if (existing) return existing;
+    const promise = fetchMananaRaw(path, kv);
+    this.inflight.set(path, promise);
+    return promise;
+  }
+}
+
+export async function fetchMananaRaw(
   path: string,
   kv?: KVNamespace,
 ): Promise<MananaEntry[]> {
@@ -104,6 +117,29 @@ async function fetchManana(
   return [];
 }
 
+function matchFromEntries(
+  track: PlaylistTrack,
+  entries: MananaEntry[],
+): KaraokeResult {
+  const result: KaraokeResult = {
+    title: track.title,
+    artist: track.artist,
+    tj: null,
+    ky: null,
+    joysound: null,
+  };
+  if (entries.length === 0) return result;
+
+  const tjEntries = entries.filter((e) => e.brand === "tj");
+  const kyEntries = entries.filter((e) => e.brand === "kumyoung");
+  const jsEntries = entries.filter((e) => e.brand === "joysound");
+
+  result.tj = findBestMatch(track.title, track.artist, tjEntries);
+  result.ky = findBestMatch(track.title, track.artist, kyEntries);
+  result.joysound = findBestMatch(track.title, track.artist, jsEntries);
+  return result;
+}
+
 function fillMissing(
   result: KaraokeResult,
   track: PlaylistTrack,
@@ -122,6 +158,7 @@ function fillMissing(
 
 async function lookupTrack(
   track: PlaylistTrack,
+  cache: FetchCache,
   kv?: KVNamespace,
 ): Promise<KaraokeResult> {
   const result: KaraokeResult = {
@@ -136,7 +173,7 @@ async function lookupTrack(
   const normArtist = normalizeArtist(track.artist);
 
   // Search by song title
-  const entries = await fetchManana(
+  const entries = await cache.fetch(
     `song/${encodeURIComponent(normTitle)}.json`,
     kv,
   );
@@ -162,7 +199,7 @@ async function lookupTrack(
     // Try alias first (more targeted)
     for (const alias of aliases) {
       if (!hasMissing()) break;
-      const aliasEntries = await fetchManana(
+      const aliasEntries = await cache.fetch(
         `singer/${encodeURIComponent(alias)}.json`,
         kv,
       );
@@ -171,7 +208,7 @@ async function lookupTrack(
 
     // Then try original artist name if still missing
     if (hasMissing()) {
-      const artistEntries = await fetchManana(
+      const artistEntries = await cache.fetch(
         `singer/${encodeURIComponent(normArtist)}.json`,
         kv,
       );
@@ -186,16 +223,212 @@ export async function lookupKaraokeBatch(
   tracks: PlaylistTrack[],
   kv?: KVNamespace,
 ): Promise<KaraokeResult[]> {
+  const cache = new FetchCache();
   const results: KaraokeResult[] = new Array(tracks.length);
-  let index = 0;
 
+  // Phase 1: Pre-fetch artist catalogs for artists with 2+ tracks
+  // This avoids redundant per-title lookups when we already have the full catalog
+  const artistGroups = new Map<string, number[]>();
+  for (let i = 0; i < tracks.length; i++) {
+    const normArtist = normalizeArtist(tracks[i].artist);
+    if (!normArtist) continue;
+    const group = artistGroups.get(normArtist) ?? [];
+    group.push(i);
+    artistGroups.set(normArtist, group);
+  }
+
+  // Pre-fetch artist catalogs concurrently for multi-track artists
+  const bulkArtists = [...artistGroups.entries()].filter(
+    ([, indices]) => indices.length >= 2,
+  );
+
+  if (bulkArtists.length > 0) {
+    const prefetchTasks: Promise<void>[] = [];
+    let prefetchIdx = 0;
+
+    const prefetchWorkers = Array.from(
+      { length: KARAOKE_CONCURRENCY },
+      async () => {
+        while (prefetchIdx < bulkArtists.length) {
+          const i = prefetchIdx++;
+          const [artist, indices] = bulkArtists[i];
+
+          // Fetch artist catalog (deduped via cache)
+          const artistEntries = await cache.fetch(
+            `singer/${encodeURIComponent(artist)}.json`,
+            kv,
+          );
+
+          // Also try aliases
+          const aliases =
+            ARTIST_ALIASES[artist.toLowerCase()] ?? [];
+          let allEntries = artistEntries;
+          for (const alias of aliases) {
+            const aliasEntries = await cache.fetch(
+              `singer/${encodeURIComponent(alias)}.json`,
+              kv,
+            );
+            if (aliasEntries.length > 0) {
+              allEntries = [...allEntries, ...aliasEntries];
+            }
+          }
+
+          // Match all tracks from this artist against the catalog
+          for (const idx of indices) {
+            results[idx] = matchFromEntries(tracks[idx], allEntries);
+          }
+        }
+      },
+    );
+
+    await Promise.all(prefetchWorkers);
+  }
+
+  // Phase 2: Look up remaining tracks (single-artist or unmatched) by title
+  let index = 0;
   const workers = Array.from({ length: KARAOKE_CONCURRENCY }, async () => {
     while (index < tracks.length) {
       const i = index++;
-      results[i] = await lookupTrack(tracks[i], kv);
+      // Skip if already resolved by artist catalog in phase 1
+      if (results[i]) {
+        // If phase 1 found some but not all brands, try title search to fill gaps
+        const r = results[i];
+        if (!r.tj || !r.ky || !r.joysound) {
+          const normTitle = normalizeTitle(tracks[i].title);
+          const entries = await cache.fetch(
+            `song/${encodeURIComponent(normTitle)}.json`,
+            kv,
+          );
+          fillMissing(r, tracks[i], entries);
+        }
+        continue;
+      }
+      results[i] = await lookupTrack(tracks[i], cache, kv);
     }
   });
 
   await Promise.all(workers);
   return results;
+}
+
+export async function lookupKaraokeStream(
+  tracks: PlaylistTrack[],
+  kv: KVNamespace | undefined,
+  onResult: (index: number, result: KaraokeResult) => void,
+): Promise<void> {
+  const cache = new FetchCache();
+  const resolved = new Set<number>();
+
+  // Phase A: Cache-only lookup (no network)
+  if (kv) {
+    for (let i = 0; i < tracks.length; i++) {
+      const normTitle = normalizeTitle(tracks[i].title);
+      const normArtist = normalizeArtist(tracks[i].artist);
+
+      const songKey = `manana:song/${encodeURIComponent(normTitle)}.json`;
+      const singerKey = `manana:singer/${encodeURIComponent(normArtist)}.json`;
+
+      const aliases = ARTIST_ALIASES[normArtist.toLowerCase()] ?? [];
+      const aliasKeys = aliases.map(
+        (a) => `manana:singer/${encodeURIComponent(a)}.json`,
+      );
+
+      let allEntries: MananaEntry[] = [];
+
+      try {
+        const cached = await kv.get<MananaEntry[]>(songKey, "json");
+        if (cached) allEntries = [...allEntries, ...cached];
+      } catch {}
+
+      try {
+        const cached = await kv.get<MananaEntry[]>(singerKey, "json");
+        if (cached) allEntries = [...allEntries, ...cached];
+      } catch {}
+
+      for (const ak of aliasKeys) {
+        try {
+          const cached = await kv.get<MananaEntry[]>(ak, "json");
+          if (cached) allEntries = [...allEntries, ...cached];
+        } catch {}
+      }
+
+      if (allEntries.length > 0) {
+        const result = matchFromEntries(tracks[i], allEntries);
+        if (result.tj || result.ky || result.joysound) {
+          resolved.add(i);
+          onResult(i, result);
+        }
+      }
+    }
+  }
+
+  // Phase B: Artist catalog fetch for artists with 2+ unresolved tracks
+  const artistGroups = new Map<string, number[]>();
+  for (let i = 0; i < tracks.length; i++) {
+    if (resolved.has(i)) continue;
+    const normArtist = normalizeArtist(tracks[i].artist);
+    if (!normArtist) continue;
+    const group = artistGroups.get(normArtist) ?? [];
+    group.push(i);
+    artistGroups.set(normArtist, group);
+  }
+
+  const bulkArtists = [...artistGroups.entries()].filter(
+    ([, indices]) => indices.length >= 2,
+  );
+
+  if (bulkArtists.length > 0) {
+    let prefetchIdx = 0;
+    const prefetchWorkers = Array.from(
+      { length: KARAOKE_CONCURRENCY },
+      async () => {
+        while (prefetchIdx < bulkArtists.length) {
+          const i = prefetchIdx++;
+          const [artist, indices] = bulkArtists[i];
+
+          const artistEntries = await cache.fetch(
+            `singer/${encodeURIComponent(artist)}.json`,
+            kv,
+          );
+
+          const aliases = ARTIST_ALIASES[artist.toLowerCase()] ?? [];
+          let allEntries = artistEntries;
+          for (const alias of aliases) {
+            const aliasEntries = await cache.fetch(
+              `singer/${encodeURIComponent(alias)}.json`,
+              kv,
+            );
+            if (aliasEntries.length > 0) {
+              allEntries = [...allEntries, ...aliasEntries];
+            }
+          }
+
+          for (const idx of indices) {
+            const result = matchFromEntries(tracks[idx], allEntries);
+            resolved.add(idx);
+            onResult(idx, result);
+          }
+        }
+      },
+    );
+    await Promise.all(prefetchWorkers);
+  }
+
+  // Phase C: Individual title search for remaining unresolved tracks
+  let index = 0;
+  const unresolvedIndices = tracks
+    .map((_, i) => i)
+    .filter((i) => !resolved.has(i));
+
+  const workers = Array.from({ length: KARAOKE_CONCURRENCY }, async () => {
+    while (index < unresolvedIndices.length) {
+      const pos = index++;
+      if (pos >= unresolvedIndices.length) break;
+      const i = unresolvedIndices[pos];
+      const result = await lookupTrack(tracks[i], cache, kv);
+      onResult(i, result);
+    }
+  });
+
+  await Promise.all(workers);
 }

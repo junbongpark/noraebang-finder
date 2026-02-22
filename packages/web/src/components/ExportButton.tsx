@@ -7,7 +7,7 @@ interface Props {
 }
 
 function toCSV(results: KaraokeResult[]): string {
-  const header = "Track,Artist,TJ,KY,Joysound";
+  const header = "곡명,아티스트,TJ,KY,Joysound";
   const rows = results.map((r) => {
     const escape = (s: string) => `"${s.replace(/"/g, '""')}"`;
     return [
@@ -56,15 +56,15 @@ export default function ExportButton({ results, playlistName }: Props) {
     <div className="flex gap-2">
       <button
         onClick={handleCopy}
-        className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium transition hover:bg-zinc-50 dark:border-zinc-600 dark:hover:bg-zinc-800"
+        className="rounded-lg border border-zinc-600 px-4 py-2 text-sm font-medium transition hover:bg-zinc-800"
       >
-        {copied ? "Copied!" : "Copy to Clipboard"}
+        {copied ? "복사됨!" : "클립보드에 복사"}
       </button>
       <button
         onClick={handleDownload}
-        className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium transition hover:bg-zinc-50 dark:border-zinc-600 dark:hover:bg-zinc-800"
+        className="rounded-lg border border-zinc-600 px-4 py-2 text-sm font-medium transition hover:bg-zinc-800"
       >
-        Download CSV
+        CSV 다운로드
       </button>
     </div>
   );
