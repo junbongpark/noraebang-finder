@@ -33,10 +33,10 @@ export default function App() {
       <main className="w-full max-w-4xl">
         <div className="mb-8 text-center">
           <h1 className="text-3xl font-bold tracking-tight text-white">
-            노래방 번호 찾기
+            Jpop 노래방 번호 찾기
           </h1>
           <p className="mt-2 text-zinc-400">
-            플레이리스트 링크로 TJ/금영/Joysound 번호 한번에
+            Kpop · Jpop 플레이리스트로 TJ/금영/Joysound 번호 한번에
           </p>
         </div>
 
