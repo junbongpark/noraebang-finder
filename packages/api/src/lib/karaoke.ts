@@ -48,9 +48,23 @@ const ARTIST_ALIASES: Record<string, string[]> = {
   rm: ["RM"],
   jhope: ["제이홉"],
   "j-hope": ["제이홉"],
-  lisa: ["리사"],
+  lisa: ["리사", "リサ", "LiSA"],
   jennie: ["제니"],
   hwasa: ["화사"],
+  // Jpop artist aliases (romaji → Japanese)
+  "kenshi yonezu": ["米津玄師"],
+  yorushika: ["ヨルシカ"],
+  yoasobi: ["YOASOBI"],
+  "king gnu": ["King Gnu"],
+  ado: ["Ado"],
+  aimer: ["Aimer"],
+  aimyon: ["あいみょん"],
+  "tuki.": ["tuki."],
+  eill: ["eill"],
+  yuuri: ["優里"],
+  zutomayo: ["ずっと真夜中でいいのに。", "ZUTOMAYO"],
+  "back number": ["back number"],
+  "mrs. green apple": ["Mrs. GREEN APPLE"],
 };
 
 /** In-memory dedup cache for a single batch run */
@@ -119,6 +133,11 @@ export async function fetchMananaRaw(
   return [];
 }
 
+function getAliases(artist: string): string[] {
+  const normArtist = normalizeArtist(artist).toLowerCase();
+  return ARTIST_ALIASES[normArtist] ?? [];
+}
+
 function matchFromEntries(
   track: PlaylistTrack,
   entries: MananaEntry[],
@@ -132,13 +151,14 @@ function matchFromEntries(
   };
   if (entries.length === 0) return result;
 
+  const aliases = getAliases(track.artist);
   const tjEntries = entries.filter((e) => e.brand === "tj");
   const kyEntries = entries.filter((e) => e.brand === "kumyoung");
   const jsEntries = entries.filter((e) => e.brand === "joysound");
 
-  result.tj = findBestMatch(track.title, track.artist, tjEntries);
-  result.ky = findBestMatch(track.title, track.artist, kyEntries);
-  result.joysound = findBestMatch(track.title, track.artist, jsEntries);
+  result.tj = findBestMatch(track.title, track.artist, tjEntries, aliases);
+  result.ky = findBestMatch(track.title, track.artist, kyEntries, aliases);
+  result.joysound = findBestMatch(track.title, track.artist, jsEntries, aliases);
   return result;
 }
 
@@ -148,14 +168,15 @@ function fillMissing(
   entries: MananaEntry[],
 ) {
   if (entries.length === 0) return;
+  const aliases = getAliases(track.artist);
   const tjEntries = entries.filter((e) => e.brand === "tj");
   const kyEntries = entries.filter((e) => e.brand === "kumyoung");
   const jsEntries = entries.filter((e) => e.brand === "joysound");
 
-  if (!result.tj) result.tj = findBestMatch(track.title, track.artist, tjEntries);
-  if (!result.ky) result.ky = findBestMatch(track.title, track.artist, kyEntries);
+  if (!result.tj) result.tj = findBestMatch(track.title, track.artist, tjEntries, aliases);
+  if (!result.ky) result.ky = findBestMatch(track.title, track.artist, kyEntries, aliases);
   if (!result.joysound)
-    result.joysound = findBestMatch(track.title, track.artist, jsEntries);
+    result.joysound = findBestMatch(track.title, track.artist, jsEntries, aliases);
 }
 
 const TJ_FALLBACK_MAX = 10;
@@ -177,21 +198,21 @@ async function lookupTrack(
 
   const normTitle = normalizeTitle(track.title);
   const normArtist = normalizeArtist(track.artist);
+  const aliases = ARTIST_ALIASES[normArtist.toLowerCase()] ?? [];
 
   // Search by song title
   const entries = await cache.fetch(
     `song/${encodeURIComponent(normTitle)}.json`,
     kv,
   );
-
   if (entries.length > 0) {
     const tjEntries = entries.filter((e) => e.brand === "tj");
     const kyEntries = entries.filter((e) => e.brand === "kumyoung");
     const jsEntries = entries.filter((e) => e.brand === "joysound");
 
-    result.tj = findBestMatch(track.title, track.artist, tjEntries);
-    result.ky = findBestMatch(track.title, track.artist, kyEntries);
-    result.joysound = findBestMatch(track.title, track.artist, jsEntries);
+    result.tj = findBestMatch(track.title, track.artist, tjEntries, aliases);
+    result.ky = findBestMatch(track.title, track.artist, kyEntries, aliases);
+    result.joysound = findBestMatch(track.title, track.artist, jsEntries, aliases);
   }
 
   // Only try artist-based search if title search found SOME results
@@ -199,7 +220,6 @@ async function lookupTrack(
   // or if the artist has a known alias (e.g. BTS → 방탄소년단)
   const hasAny = result.tj || result.ky || result.joysound;
   const hasMissing = () => !result.tj || !result.ky || !result.joysound;
-  const aliases = ARTIST_ALIASES[normArtist.toLowerCase()] ?? [];
 
   if (hasMissing() && normArtist && (hasAny || aliases.length > 0)) {
     // Try alias first (more targeted)
@@ -222,16 +242,19 @@ async function lookupTrack(
     }
   }
 
-  // Fallback 1: D1 database lookup
-  if (!result.tj && db) {
-    result.tj = await searchTJFromDB(db, normTitle, track.artist);
+  // Fallback 1: D1 database lookup (also try if Manana match is low confidence)
+  if (db && (!result.tj || result.tj.score < 0.8)) {
+    const d1Match = await searchTJFromDB(db, normTitle, track.artist, aliases);
+    if (d1Match && (!result.tj || d1Match.score > result.tj.score)) {
+      result.tj = d1Match;
+    }
   }
 
   // Fallback 2: direct search on TJ website if D1 also has no results
   if (!result.tj && tjFallbackBudget.remaining > 0) {
     tjFallbackBudget.remaining--;
     const tjResults = await searchTJ(normTitle);
-    result.tj = matchDirect(track.title, track.artist, tjResults);
+    result.tj = matchDirect(track.title, track.artist, tjResults, aliases);
     // Save scraped results to D1 for future lookups
     if (tjResults.length > 0 && db) {
       saveTJResults(db, tjResults).catch(() => {});
@@ -327,6 +350,11 @@ export async function lookupKaraokeBatch(
             kv,
           );
           fillMissing(r, tracks[i], entries);
+          // D1 fallback for missing TJ
+          if (!r.tj && db) {
+            const aliases = getAliases(tracks[i].artist);
+            r.tj = await searchTJFromDB(db, normTitle, tracks[i].artist, aliases);
+          }
         }
         continue;
       }

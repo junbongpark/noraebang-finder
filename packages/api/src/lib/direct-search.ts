@@ -1,5 +1,5 @@
 import { KaraokeMatch } from "./types";
-import { normalizeTitle, similarity } from "./matching";
+import { normalizeTitle, normalizeArtist, similarity } from "./matching";
 
 interface DirectResult {
   no: string;
@@ -55,6 +55,18 @@ export function parseTJResults(html: string): DirectResult[] {
   return results;
 }
 
+const CJK_RE = /[\u3000-\u9fff\uac00-\ud7af\uff00-\uffef]/;
+
+function isLatin(s: string): boolean {
+  const letters = s.replace(/[\s\d\W]/g, "");
+  if (!letters) return false;
+  return /^[a-zA-Z]+$/.test(letters);
+}
+
+function isCJK(s: string): boolean {
+  return CJK_RE.test(s);
+}
+
 function stripHtml(s: string): string {
   return s.replace(/<[^>]*>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#39;/g, "'").replace(/&quot;/g, '"').trim();
 }
@@ -64,22 +76,50 @@ export function matchDirect(
   title: string,
   artist: string,
   results: DirectResult[],
+  artistAliases?: string[],
 ): KaraokeMatch | null {
   if (results.length === 0) return null;
   const normTitle = normalizeTitle(title).toLowerCase();
+  const normArtist = normalizeArtist(artist).toLowerCase();
+  const allArtistNames = [normArtist, ...(artistAliases ?? []).map((a) => a.toLowerCase())];
   let best: KaraokeMatch | null = null;
   let bestScore = 0;
 
   for (const r of results) {
-    const entryTitle = r.title.toLowerCase();
-    const score = similarity(normTitle, entryTitle);
-    if (score > bestScore) {
-      bestScore = score;
+    // Strip parenthetical metadata from DB titles (e.g. "Lemon(ドラマ'...' OST)")
+    const cleanTitle = r.title.replace(/\s*\(.*?\)\s*$/, "").trim();
+    const entryTitle = normalizeTitle(cleanTitle).toLowerCase();
+    const entrySinger = r.singer.normalize("NFC").toLowerCase();
+    const titleScore = similarity(normTitle, entryTitle);
+
+    let artistScore = 0;
+    if (!normArtist) {
+      artistScore = 0.5;
+    } else {
+      // Try all known names for this artist and pick best match
+      for (const name of allArtistNames) {
+        const nameIsLatin = isLatin(name);
+        const nameIsCJK = isCJK(name);
+        const singerIsLatin = isLatin(entrySinger);
+        const singerIsCJK = isCJK(entrySinger);
+        const crossScript =
+          (nameIsLatin && singerIsCJK) || (nameIsCJK && singerIsLatin);
+        const score = crossScript ? 0 : similarity(name, entrySinger);
+        if (score > artistScore) artistScore = score;
+      }
+    }
+
+    const combined = normArtist
+      ? 0.6 * titleScore + 0.4 * artistScore
+      : titleScore;
+
+    if (combined > bestScore) {
+      bestScore = combined;
       best = {
         no: r.no,
         matchedTitle: r.title,
         matchedSinger: r.singer,
-        score,
+        score: combined,
       };
     }
   }

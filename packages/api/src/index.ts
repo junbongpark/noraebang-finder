@@ -7,6 +7,8 @@ import { getYouTubeMusicPlaylist } from "./lib/youtube-music";
 import { getAppleMusicPlaylist } from "./lib/apple-music";
 import { lookupKaraokeBatch, lookupKaraokeStream, fetchMananaRaw } from "./lib/karaoke";
 import { crawlTJ } from "./lib/tj-crawler";
+import { isJpopSong } from "./lib/jpop-filter";
+import { syncJpopReleases, KV_KEY as JPOP_RELEASES_KEY, JpopRelease } from "./lib/mastodon-releases";
 import { streamSSE } from "hono/streaming";
 import { MAX_PLAYLIST_TRACKS } from "./lib/constants";
 
@@ -130,19 +132,30 @@ app.post("/api/karaoke/stream", async (c) => {
   }
 });
 
-// Recent releases (last 7 days, TJ + KY only)
+// Recent J-pop releases (last 7 days, TJ + KY only)
 app.get("/api/releases/recent", async (c) => {
   try {
     const kv = c.env.KARAOKE_CACHE;
     const now = new Date();
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-    // Fetch current month
+    // Primary: bot-synced data from KV
+    const cached = await kv?.get<JpopRelease[]>(JPOP_RELEASES_KEY, "json");
+    if (cached && cached.length > 0) {
+      const releases = cached
+        .filter((e) => {
+          const d = new Date(e.release);
+          return d >= sevenDaysAgo && d <= now;
+        })
+        .sort((a, b) => b.release.localeCompare(a.release));
+      return c.json({ releases });
+    }
+
+    // Fallback: Manana API + isJpopSong filter
     const yyyy = now.getFullYear();
     const mm = String(now.getMonth() + 1).padStart(2, "0");
     let entries = await fetchMananaRaw(`release/${yyyy}${mm}.json`, kv);
 
-    // Also fetch previous month if we're in the first week
     if (now.getDate() <= 7) {
       const prev = new Date(yyyy, now.getMonth() - 1, 1);
       const prevYyyy = prev.getFullYear();
@@ -158,12 +171,13 @@ app.get("/api/releases/recent", async (c) => {
       .filter((e: MananaEntry) => {
         if (e.brand !== "tj" && e.brand !== "kumyoung") return false;
         const d = new Date(e.release);
-        return d >= sevenDaysAgo && d <= now;
+        if (d < sevenDaysAgo || d > now) return false;
+        return isJpopSong(e.singer, e.title);
       })
       .sort((a: MananaEntry, b: MananaEntry) =>
         b.release.localeCompare(a.release),
       )
-      .slice(0, 50);
+      .slice(0, 100);
 
     return c.json({ releases });
   } catch (e) {
@@ -204,6 +218,11 @@ export default {
     // Crawl TJ website and populate D1 database
     if (env.TJ_DB) {
       await crawlTJ(env.TJ_DB, kv);
+    }
+
+    // Sync J-pop releases from Mastodon bot
+    if (env.TJ_DB) {
+      await syncJpopReleases(env.TJ_DB, kv);
     }
 
     const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));

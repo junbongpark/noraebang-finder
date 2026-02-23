@@ -6,6 +6,7 @@ export async function searchTJFromDB(
   db: D1Database,
   title: string,
   artist: string,
+  artistAliases?: string[],
 ): Promise<KaraokeMatch | null> {
   const query = title.trim();
   if (!query) return null;
@@ -18,7 +19,7 @@ export async function searchTJFromDB(
 
     if (!results || results.length === 0) return null;
 
-    return matchDirect(title, artist, results);
+    return matchDirect(title, artist, results, artistAliases);
   } catch {
     return null;
   }

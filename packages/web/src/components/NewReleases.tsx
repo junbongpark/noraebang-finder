@@ -38,7 +38,7 @@ export default function NewReleases() {
     return (
       <div className="mt-6">
         <h2 className="mb-3 text-lg font-semibold text-white">
-          이번 주 신곡
+          이번 주 J-pop 신곡
         </h2>
         <div className="space-y-1">
           {Array.from({ length: 5 }).map((_, i) => (
@@ -57,7 +57,7 @@ export default function NewReleases() {
   return (
     <div className="mt-6">
       <h2 className="mb-3 text-lg font-semibold text-white">
-        이번 주 신곡
+        이번 주 J-pop 신곡
       </h2>
 
       {/* Device tabs */}

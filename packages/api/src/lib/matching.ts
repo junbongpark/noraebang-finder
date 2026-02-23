@@ -56,13 +56,11 @@ export function findBestMatch(
   title: string,
   artist: string,
   candidates: MananaEntry[],
+  artistAliases?: string[],
 ): KaraokeMatch | null {
   const normTitle = normalizeTitle(title).toLowerCase();
   const normArtist = normalizeArtist(artist).toLowerCase();
-
-  // Detect cross-script artist comparison (e.g. "rokudenashi" vs "ロクデナシ")
-  const artistIsLatin = isLatin(normArtist);
-  const artistIsCJK = isCJK(normArtist);
+  const allArtistNames = [normArtist, ...(artistAliases ?? []).map((a) => a.toLowerCase())];
 
   let bestMatch: KaraokeMatch | null = null;
   let bestScore = 0;
@@ -78,13 +76,18 @@ export function findBestMatch(
     if (!normArtist) {
       artistScore = 0.5;
     } else {
-      // If one is Latin and the other is CJK, Levenshtein is meaningless
-      const singerIsLatin = isLatin(entrySinger);
-      const singerIsCJK = isCJK(entrySinger);
-      const crossScript =
-        (artistIsLatin && singerIsCJK) || (artistIsCJK && singerIsLatin);
-
-      artistScore = crossScript ? 0 : similarity(normArtist, entrySinger);
+      // Try all known names for this artist and pick best match
+      artistScore = 0;
+      for (const name of allArtistNames) {
+        const nameIsLatin = isLatin(name);
+        const nameIsCJK = isCJK(name);
+        const singerIsLatin = isLatin(entrySinger);
+        const singerIsCJK = isCJK(entrySinger);
+        const crossScript =
+          (nameIsLatin && singerIsCJK) || (nameIsCJK && singerIsLatin);
+        const score = crossScript ? 0 : similarity(name, entrySinger);
+        if (score > artistScore) artistScore = score;
+      }
     }
 
     const combined = normArtist
@@ -112,13 +115,16 @@ export function findBestMatch(
   // If cross-script and multiple candidates tie (within 0.05), reject — ambiguous
   if (secondBestScore > 0 && bestScore - secondBestScore < 0.05) {
     // Multiple candidates with essentially the same score — ambiguous match
-    // Only reject if artist matching was cross-script (couldn't differentiate)
+    // Only reject if ALL artist names are cross-script (couldn't differentiate)
     const matchSinger = bestMatch.matchedSinger.toLowerCase();
     const singerIsLatin = isLatin(matchSinger);
     const singerIsCJK = isCJK(matchSinger);
-    const crossScript =
-      (artistIsLatin && singerIsCJK) || (artistIsCJK && singerIsLatin);
-    if (crossScript) return null;
+    const allCrossScript = allArtistNames.every((name) => {
+      const nameIsLatin = isLatin(name);
+      const nameIsCJK = isCJK(name);
+      return (nameIsLatin && singerIsCJK) || (nameIsCJK && singerIsLatin);
+    });
+    if (allCrossScript) return null;
   }
 
   return bestMatch;
