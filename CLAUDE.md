@@ -8,10 +8,11 @@ Monorepo with two packages:
 
 - **`packages/api`** — Cloudflare Workers + Hono API
   - Playlist extraction (Spotify embed scraping, YouTube Music InnerTube, Apple Music HTML scraping — no API keys needed)
-  - Karaoke number lookup via [Manana API](https://api.manana.kr) + TJ direct search fallback
+  - Karaoke number lookup via [Manana API](https://api.manana.kr) + D1 database + TJ direct search fallback
+  - **D1 database**: 70K+ TJ songs for fast, persistent lookup (Manana gaps filled)
   - SSE streaming endpoint for real-time results
   - KV caching with 7-day TTL
-  - Cron-based popular artist precaching
+  - Cron-based popular artist precaching + TJ crawler
 
 - **`packages/web`** — Vite + React 19 + Tailwind CSS 4
   - Mobile-first dark theme UI (Korean)
@@ -40,6 +41,8 @@ npm run dev                     # localhost:5173, proxies /api → :8787
 | `packages/api/src/lib/spotify.ts` | Spotify embed scraping (no API key needed) |
 | `packages/api/src/lib/youtube-music.ts` | YouTube Music InnerTube scraping (no API key needed) |
 | `packages/api/src/lib/apple-music.ts` | Apple Music HTML scraping (no API key needed) |
+| `packages/api/src/lib/tj-db.ts` | D1 database search/save for TJ songs |
+| `packages/api/src/lib/tj-crawler.ts` | Cron-based TJ website crawler for D1 population |
 | `packages/api/src/lib/direct-search.ts` | TJ direct website search fallback |
 | `packages/api/src/lib/url-parser.ts` | Playlist URL parsing and platform detection |
 | `packages/web/src/hooks/usePlaylistConvert.ts` | SSE stream consumption hook |
@@ -62,9 +65,10 @@ npm run dev                     # localhost:5173, proxies /api → :8787
 
 ## Caching Strategy
 
-1. **Popular artists** — Precached daily via cron (Jpop/Kpop/Western)
-2. **User queries** — Auto-cached in KV on first lookup (7-day TTL)
-3. **New releases** — Monthly release data fetched via cron → artist catalogs cached
+1. **TJ D1 database** — 70K+ songs, persistent SQLite via Cloudflare D1, daily cron crawler
+2. **Popular artists** — Precached daily via cron (Jpop/Kpop/Western)
+3. **User queries** — Auto-cached in KV on first lookup (7-day TTL)
+4. **New releases** — Monthly release data fetched via cron → artist catalogs cached
 
 ## Deployment
 
