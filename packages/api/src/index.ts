@@ -9,7 +9,7 @@ import { lookupKaraokeBatch, lookupKaraokeStream, fetchMananaRaw } from "./lib/k
 import { crawlTJ } from "./lib/tj-crawler";
 import { isJpopSong } from "./lib/jpop-filter";
 import { syncJpopReleases, KV_KEY as JPOP_RELEASES_KEY, JpopRelease } from "./lib/mastodon-releases";
-import { ensureTitleKoColumn, getUntranslatedJpopSongs, updateTitleKoBatch, searchTJSongs } from "./lib/tj-db";
+import { ensureKoColumns, getUntranslatedJpopSongs, updateTitleKoBatch, updateSingerKoBatch, searchTJSongs } from "./lib/tj-db";
 import { translateToKorean } from "./lib/deepl";
 import { streamSSE } from "hono/streaming";
 import { MAX_PLAYLIST_TRACKS } from "./lib/constants";
@@ -242,9 +242,14 @@ export default {
       await syncJpopReleases(env.TJ_DB, kv, env.DEEPL_API_KEY);
     }
 
+    // Ensure ko columns exist + populate singer_ko from mapping
+    if (env.TJ_DB) {
+      await ensureKoColumns(env.TJ_DB);
+      await updateSingerKoBatch(env.TJ_DB);
+    }
+
     // Batch translate untranslated J-pop songs
     if (env.TJ_DB && env.DEEPL_API_KEY) {
-      await ensureTitleKoColumn(env.TJ_DB);
       const untranslated = await getUntranslatedJpopSongs(env.TJ_DB, 50);
       if (untranslated.length > 0) {
         const titles = untranslated.map((s) => s.title);

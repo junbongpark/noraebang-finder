@@ -7,6 +7,7 @@ interface SearchResult {
   title: string;
   titleKo: string | null;
   singer: string;
+  singerKo: string | null;
 }
 
 export default function SearchBar() {
@@ -126,7 +127,7 @@ function ResultRow({ result, onClose }: { result: SearchResult; onClose: () => v
           </span>
         )}
         <span className="block truncate text-xs text-zinc-500">
-          {result.singer}
+          {result.singerKo ? `${result.singer} (${result.singerKo})` : result.singer}
         </span>
       </span>
     </button>
