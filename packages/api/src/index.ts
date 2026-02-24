@@ -9,6 +9,8 @@ import { lookupKaraokeBatch, lookupKaraokeStream, fetchMananaRaw } from "./lib/k
 import { crawlTJ } from "./lib/tj-crawler";
 import { isJpopSong } from "./lib/jpop-filter";
 import { syncJpopReleases, KV_KEY as JPOP_RELEASES_KEY, JpopRelease } from "./lib/mastodon-releases";
+import { ensureTitleKoColumn, getUntranslatedJpopSongs, updateTitleKoBatch, searchTJSongs } from "./lib/tj-db";
+import { translateToKorean } from "./lib/deepl";
 import { streamSSE } from "hono/streaming";
 import { MAX_PLAYLIST_TRACKS } from "./lib/constants";
 
@@ -186,6 +188,21 @@ app.get("/api/releases/recent", async (c) => {
   }
 });
 
+// Search TJ songs by title or Korean translation
+app.get("/api/search", async (c) => {
+  try {
+    const q = c.req.query("q")?.trim();
+    if (!q || q.length < 2) {
+      return c.json({ results: [] });
+    }
+    const results = await searchTJSongs(c.env.TJ_DB, q, 20);
+    return c.json({ results });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Unknown error";
+    return c.json({ error: message, code: "SEARCH_ERROR" }, 500);
+  }
+});
+
 const POPULAR_ARTISTS = [
   // Kpop
   "방탄소년단", "블랙핑크", "트와이스", "아이유", "에스파",
@@ -222,7 +239,26 @@ export default {
 
     // Sync J-pop releases from Mastodon bot
     if (env.TJ_DB) {
-      await syncJpopReleases(env.TJ_DB, kv);
+      await syncJpopReleases(env.TJ_DB, kv, env.DEEPL_API_KEY);
+    }
+
+    // Batch translate untranslated J-pop songs
+    if (env.TJ_DB && env.DEEPL_API_KEY) {
+      await ensureTitleKoColumn(env.TJ_DB);
+      const untranslated = await getUntranslatedJpopSongs(env.TJ_DB, 50);
+      if (untranslated.length > 0) {
+        const titles = untranslated.map((s) => s.title);
+        const translated = await translateToKorean(titles, env.DEEPL_API_KEY);
+        const updates: { no: string; titleKo: string }[] = [];
+        for (let i = 0; i < untranslated.length; i++) {
+          if (translated[i] !== titles[i]) {
+            updates.push({ no: untranslated[i].no, titleKo: translated[i] });
+          }
+        }
+        if (updates.length > 0) {
+          await updateTitleKoBatch(env.TJ_DB, updates);
+        }
+      }
     }
 
     const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));

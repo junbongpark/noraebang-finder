@@ -13,6 +13,7 @@ interface ReleaseEntry {
   brand: string;
   no: string;
   title: string;
+  titleKo?: string;
   singer: string;
   release: string;
 }
@@ -118,7 +119,12 @@ function ReleaseRow({ entry }: { entry: ReleaseEntry }) {
         <span className="block truncate text-sm text-zinc-200">
           {entry.title}
         </span>
-        <span className="block truncate text-xs text-zinc-400">
+        {entry.titleKo && (
+          <span className="block truncate text-xs text-zinc-400">
+            {entry.titleKo}
+          </span>
+        )}
+        <span className="block truncate text-xs text-zinc-500">
           {entry.singer}
         </span>
       </span>

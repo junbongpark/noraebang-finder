@@ -7,6 +7,7 @@ import LoadingState from "./components/LoadingState";
 import ErrorBanner from "./components/ErrorBanner";
 import HowItWorks from "./components/HowItWorks";
 import NewReleases from "./components/NewReleases";
+import SearchBar from "./components/SearchBar";
 import { usePlaylistConvert } from "./hooks/usePlaylistConvert";
 import { KaraokeResult } from "./types";
 
@@ -45,6 +46,7 @@ export default function App() {
         {phase === "idle" && (
           <>
             <HowItWorks />
+            <SearchBar />
             <NewReleases />
           </>
         )}

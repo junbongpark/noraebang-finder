@@ -1,6 +1,7 @@
 import { searchTJ, matchDirect } from "./direct-search";
-import { saveTJResults } from "./tj-db";
+import { saveTJResults, getTitleKo, updateTitleKoBatch } from "./tj-db";
 import { fetchMananaRaw } from "./karaoke";
+import { translateToKorean } from "./deepl";
 import { MananaEntry } from "./types";
 
 const MASTODON_ACCOUNT_ID = "109797204938216927";
@@ -12,6 +13,7 @@ export interface JpopRelease {
   brand: string;
   no: string;
   title: string;
+  titleKo?: string;
   singer: string;
   release: string;
 }
@@ -121,10 +123,12 @@ async function resolveTJ(
     if (results && results.length > 0) {
       const match = matchDirect(title, "", results);
       if (match) {
+        const titleKo = await getTitleKo(db, match.no);
         return {
           brand: "tj",
           no: match.no,
           title: match.matchedTitle,
+          titleKo: titleKo ?? undefined,
           singer: match.matchedSinger,
           release: date,
         };
@@ -186,10 +190,11 @@ async function resolveKY(
   return null;
 }
 
-/** Main sync function: fetch bot posts → resolve → store in KV */
+/** Main sync function: fetch bot posts → resolve → translate → store in KV */
 export async function syncJpopReleases(
   db: D1Database,
   kv: KVNamespace,
+  deeplApiKey?: string,
 ): Promise<void> {
   const posts = await fetchBotPosts();
   if (posts.length === 0) return;
@@ -220,6 +225,25 @@ export async function syncJpopReleases(
       if (resolved && !existingKeys.has(`${resolved.brand}:${resolved.no}`)) {
         newReleases.push(resolved);
         existingKeys.add(`${resolved.brand}:${resolved.no}`);
+      }
+    }
+  }
+
+  // Translate untranslated new releases via DeepL
+  if (deeplApiKey && newReleases.length > 0) {
+    const untranslated = newReleases.filter((r) => !r.titleKo);
+    if (untranslated.length > 0) {
+      const titles = untranslated.map((r) => r.title);
+      const translated = await translateToKorean(titles, deeplApiKey);
+      const dbUpdates: { no: string; titleKo: string }[] = [];
+      for (let i = 0; i < untranslated.length; i++) {
+        if (translated[i] !== titles[i]) {
+          untranslated[i].titleKo = translated[i];
+          dbUpdates.push({ no: untranslated[i].no, titleKo: translated[i] });
+        }
+      }
+      if (dbUpdates.length > 0) {
+        await updateTitleKoBatch(db, dbUpdates).catch(() => {});
       }
     }
   }

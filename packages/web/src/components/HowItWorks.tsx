@@ -13,6 +13,9 @@ export default function HowItWorks() {
           <p className="mt-0.5 text-xs text-zinc-500">
             Spotify / YT Music / Apple
           </p>
+          <p className="mt-0.5 text-xs text-zinc-500">
+            최대 200곡
+          </p>
         </div>
 
         {/* Arrow */}
