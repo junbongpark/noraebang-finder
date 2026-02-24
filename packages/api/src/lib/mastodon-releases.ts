@@ -229,9 +229,10 @@ export async function syncJpopReleases(
     }
   }
 
-  // Translate untranslated new releases via DeepL
-  if (deeplApiKey && newReleases.length > 0) {
-    const untranslated = newReleases.filter((r) => !r.titleKo);
+  // Translate untranslated releases (both existing and new) via DeepL
+  const all = [...existing, ...newReleases];
+  if (deeplApiKey) {
+    const untranslated = all.filter((r) => !r.titleKo);
     if (untranslated.length > 0) {
       const titles = untranslated.map((r) => r.title);
       const translated = await translateToKorean(titles, deeplApiKey);
@@ -248,8 +249,7 @@ export async function syncJpopReleases(
     }
   }
 
-  if (newReleases.length > 0) {
-    const all = [...existing, ...newReleases];
+  if (all.length > 0) {
     await kv.put(KV_KEY, JSON.stringify(all), { expirationTtl: KV_TTL });
   }
 }
