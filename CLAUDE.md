@@ -82,5 +82,18 @@ npm run dev                     # localhost:5173, proxies /api → :8787
 - **API**: `cd packages/api && wrangler deploy`
 - **Web**: Auto-deployed to GitHub Pages on push to main
 - **No API keys needed** — all platform integrations use public scraping
-- **Optional secret**: `DEEPL_API_KEY` for JA→KO translation (`wrangler secret put DEEPL_API_KEY`)
 - **GitHub repo variable**: `VITE_API_URL` (Workers production URL)
+
+## DeepL Translation (미설정)
+
+J-pop 곡명을 한국어로 자동 번역하는 기능. 현재 API 키 미설정 상태.
+
+### 설정 방법
+1. [DeepL](https://www.deepl.com/your-account/keys)에서 Free 플랜 가입 후 API 키 발급
+2. `cd packages/api && npx wrangler secret put DEEPL_API_KEY` 실행 후 키 입력
+3. cron이 돌면 자동으로 번역 시작 (일 50곡 배치 + 신곡 즉시 번역)
+
+### 사용량
+- Free 플랜: 월 50만자
+- 예상 사용량: 시드 72곡 ~2,000자 + 일 50곡 ~1,500자 → 월 ~5만자 (한도의 10%)
+- `title_ko` 컬럼에 저장, 검색 및 신곡 표시에 활용
