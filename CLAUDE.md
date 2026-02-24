@@ -13,6 +13,8 @@ Monorepo with two packages:
   - SSE streaming endpoint for real-time results
   - KV caching with 7-day TTL
   - Cron-based popular artist precaching + TJ crawler
+  - J-pop new releases via Mastodon bot (`@karaoke_jpop@planet.moe`) + Manana fallback
+  - DeepL Free API for JA→KO title translation (cron batch + new release instant)
 
 - **`packages/web`** — Vite + React 19 + Tailwind CSS 4
   - Mobile-first dark theme UI (Korean)
@@ -45,6 +47,10 @@ npm run dev                     # localhost:5173, proxies /api → :8787
 | `packages/api/src/lib/tj-crawler.ts` | Cron-based TJ website crawler for D1 population |
 | `packages/api/src/lib/direct-search.ts` | TJ direct website search fallback |
 | `packages/api/src/lib/url-parser.ts` | Playlist URL parsing and platform detection |
+| `packages/api/src/lib/mastodon-releases.ts` | Mastodon bot J-pop release sync |
+| `packages/api/src/lib/jpop-filter.ts` | J-pop song detection (hiragana/katakana + known artists) |
+| `packages/api/src/lib/deepl.ts` | DeepL Free API client (JA→KO translation) |
+| `packages/web/src/components/SearchBar.tsx` | TJ song search with Korean translation |
 | `packages/web/src/hooks/usePlaylistConvert.ts` | SSE stream consumption hook |
 | `packages/web/src/components/TrackRow.tsx` | Karaoke number cards (mobile-first) |
 
@@ -61,7 +67,8 @@ npm run dev                     # localhost:5173, proxies /api → :8787
 - `POST /api/playlist` — Extract tracks from Spotify/YouTube Music/Apple Music playlist URL
 - `POST /api/karaoke` — Batch lookup (returns all at once)
 - `POST /api/karaoke/stream` — SSE streaming lookup (results one by one)
-- `GET /api/releases/recent` — This week's new TJ/KY releases
+- `GET /api/releases/recent` — This week's new J-pop releases (Mastodon bot primary, Manana fallback)
+- `GET /api/search?q=` — Search TJ songs by title or Korean translation
 
 ## Caching Strategy
 
@@ -75,4 +82,5 @@ npm run dev                     # localhost:5173, proxies /api → :8787
 - **API**: `cd packages/api && wrangler deploy`
 - **Web**: Auto-deployed to GitHub Pages on push to main
 - **No API keys needed** — all platform integrations use public scraping
+- **Optional secret**: `DEEPL_API_KEY` for JA→KO translation (`wrangler secret put DEEPL_API_KEY`)
 - **GitHub repo variable**: `VITE_API_URL` (Workers production URL)
