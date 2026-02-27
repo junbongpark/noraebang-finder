@@ -120,7 +120,7 @@ export default function App() {
             {viewMode === "numbers" ? (
               <NumberListView results={results} streaming={phase === "streaming"} />
             ) : (
-              <TrackTable results={results} />
+              <TrackTable results={results} streaming={phase === "streaming"} />
             )}
           </div>
         )}

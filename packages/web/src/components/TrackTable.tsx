@@ -1,15 +1,23 @@
+import { useMemo } from "react";
 import { KaraokeResult } from "../types";
 import TrackRow from "./TrackRow";
 
 interface Props {
   results: (KaraokeResult | null)[];
+  streaming?: boolean;
 }
 
-export default function TrackTable({ results }: Props) {
+export default function TrackTable({ results, streaming }: Props) {
   const resolved = results.filter((r) => r !== null);
   const found = resolved.filter((r) => r.tj || r.ky || r.joysound).length;
 
-  const rows = results.map((r, i) => ({ result: r, index: i }));
+  const rows = useMemo(() => {
+    const items = results.map((r, i) => ({ result: r, index: i }));
+    if (!streaming) return items;
+    const hasResult = items.filter(({ result }) => result !== null && (result.tj || result.ky || result.joysound));
+    const noResult = items.filter(({ result }) => result === null || !(result.tj || result.ky || result.joysound));
+    return [...hasResult, ...noResult];
+  }, [results, streaming]);
 
   return (
     <div className="w-full">

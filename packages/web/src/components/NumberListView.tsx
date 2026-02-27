@@ -19,7 +19,11 @@ export default function NumberListView({ results, streaming }: Props) {
 
   const sorted = useMemo(() => {
     const items = results.map((r, i) => ({ result: r, index: i }));
-    if (streaming) return { all: items, found: [], notFound: [] };
+    if (streaming) {
+      const found = items.filter(({ result }) => result !== null && result[device] !== null);
+      const rest = items.filter(({ result }) => result === null || result[device] === null);
+      return { all: [...found, ...rest], found: [], notFound: [] };
+    }
     const found = items.filter(({ result }) => result !== null && result[device] !== null);
     const notFound = items.filter(({ result }) => result === null || result[device] === null);
     return { all: [], found, notFound };
