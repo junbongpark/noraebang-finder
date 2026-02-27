@@ -41,11 +41,13 @@ export function parseTJResults(html: string): DirectResult[] {
   const nums: string[] = [];
   while ((match = numRe.exec(html)) !== null) nums.push(match[1]);
 
-  const titleRe = /class="grid-item title3[^"]*"[\s\S]*?<span>([\s\S]*?)<\/span>/g;
+  // Use </span></p> as end anchor to handle nested highlight spans
+  // e.g. <span><span class='highlight'>し</span>わあわせ</span></p>
+  const titleRe = /class="grid-item title3[^"]*"[\s\S]*?<p[^>]*><span>([\s\S]*?)<\/span><\/p>/g;
   const titles: string[] = [];
   while ((match = titleRe.exec(html)) !== null) titles.push(stripHtml(match[1]));
 
-  const singerRe = /class="grid-item title4[^"]*"[\s\S]*?<span>([\s\S]*?)<\/span>/g;
+  const singerRe = /class="grid-item title4[^"]*"[\s\S]*?<p[^>]*><span>([\s\S]*?)<\/span><\/p>/g;
   const singers: string[] = [];
   while ((match = singerRe.exec(html)) !== null) singers.push(stripHtml(match[1]));
 
@@ -65,6 +67,15 @@ function isLatin(s: string): boolean {
 
 function isCJK(s: string): boolean {
   return CJK_RE.test(s);
+}
+
+/** CJK chars carry more info per character; count them as 2 for uniqueness checks */
+function effectiveLength(s: string): number {
+  let count = 0;
+  for (const c of s) {
+    count += CJK_RE.test(c) ? 2 : c.trim() ? 1 : 0;
+  }
+  return count;
 }
 
 function stripHtml(s: string): string {
@@ -143,8 +154,13 @@ export function matchDirect(
 
   // Reject if artist was provided but best artist similarity is very low
   // (title matched but wrong artist — e.g. "踊" exists by Vaundy but we want Ado)
+  // Exception: allow when title is highly unique (long, exact match, single candidate)
   if (normArtist && bestArtistScore < 0.35) {
-    return null;
+    const titleScore = (bestScore - 0.4 * bestArtistScore) / 0.6;
+    const singleCandidate = secondBestScore === 0;
+    if (!(titleScore >= 0.9 && singleCandidate && effectiveLength(normTitle) >= 6)) {
+      return null;
+    }
   }
 
   return best;

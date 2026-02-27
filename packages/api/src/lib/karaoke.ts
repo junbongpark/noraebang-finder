@@ -7,6 +7,7 @@ import { MananaEntry, KaraokeResult, PlaylistTrack } from "./types";
 import { normalizeTitle, normalizeArtist, findBestMatch } from "./matching";
 import { searchTJ, matchDirect } from "./direct-search";
 import { searchTJFromDB, saveTJResults } from "./tj-db";
+import { lookupArtistAliases } from "./musicbrainz";
 
 const ARTIST_ALIASES: Record<string, string[]> = {
   bts: ["방탄소년단"],
@@ -65,6 +66,17 @@ const ARTIST_ALIASES: Record<string, string[]> = {
   zutomayo: ["ずっと真夜中でいいのに。", "ZUTOMAYO"],
   "back number": ["back number"],
   "mrs. green apple": ["Mrs. GREEN APPLE"],
+  "sheena ringo": ["椎名林檎"],
+  "fujii kaze": ["藤井風"],
+  "hikaru utada": ["宇多田ヒカル"],
+  "eve": ["Eve"],
+  reol: ["Reol"],
+  "official hige dandism": ["Official髭男dism"],
+  "radwimps": ["RADWIMPS"],
+  "bump of chicken": ["BUMP OF CHICKEN"],
+  "one ok rock": ["ONE OK ROCK"],
+  "creepy nuts": ["Creepy Nuts"],
+  "hoshino gen": ["星野源"],
 };
 
 /** In-memory dedup cache for a single batch run */
@@ -198,7 +210,10 @@ async function lookupTrack(
 
   const normTitle = normalizeTitle(track.title);
   const normArtist = normalizeArtist(track.artist);
-  const aliases = ARTIST_ALIASES[normArtist.toLowerCase()] ?? [];
+  let aliases = ARTIST_ALIASES[normArtist.toLowerCase()] ?? [];
+  if (aliases.length === 0) {
+    aliases = await lookupArtistAliases(normArtist, kv);
+  }
 
   // Search by song title
   const entries = await cache.fetch(

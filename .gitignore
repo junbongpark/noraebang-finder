@@ -22,3 +22,6 @@ yarn-debug.log*
 .next/
 next-env.d.ts
 packages/api/.dev.vars
+
+# temp files
+*.tmp-seed.sql

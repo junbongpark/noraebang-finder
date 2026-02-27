@@ -35,6 +35,7 @@ async function fetchBotPosts(): Promise<MastodonPost[]> {
   const url = `${MASTODON_API}/accounts/${MASTODON_ACCOUNT_ID}/statuses?limit=20`;
   const res = await fetch(url, {
     headers: { "User-Agent": "Mozilla/5.0 (compatible; NoraebangFinder/1.0)" },
+    signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) return [];
   return res.json();

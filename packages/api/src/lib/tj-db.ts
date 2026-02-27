@@ -1,6 +1,11 @@
 import { KaraokeMatch } from "./types";
 import { matchDirect } from "./direct-search";
 
+/** Escape SQL LIKE wildcard characters */
+function escapeLike(s: string): string {
+  return s.replace(/[%_]/g, "\\$&");
+}
+
 /** Ensure title_ko and singer_ko columns exist (safe to call multiple times) */
 export async function ensureKoColumns(db: D1Database): Promise<void> {
   try {
@@ -101,9 +106,9 @@ export async function searchTJFromDB(
     // Try title + singer first for precise matching
     const allNames = [artist, ...(artistAliases ?? [])].filter(Boolean);
     if (allNames.length > 0) {
-      const singerClauses = allNames.map(() => "singer LIKE ?").join(" OR ");
-      const sql = `SELECT no, title, singer FROM tj_songs WHERE title LIKE ? AND (${singerClauses})`;
-      const binds = [`%${query}%`, ...allNames.map((n) => `%${n}%`)];
+      const singerClauses = allNames.map(() => "singer LIKE ? ESCAPE '\\'").join(" OR ");
+      const sql = `SELECT no, title, singer FROM tj_songs WHERE title LIKE ? ESCAPE '\\' AND (${singerClauses})`;
+      const binds = [`%${escapeLike(query)}%`, ...allNames.map((n) => `%${escapeLike(n)}%`)];
       const { results: precise } = await db
         .prepare(sql)
         .bind(...binds)
@@ -116,8 +121,8 @@ export async function searchTJFromDB(
 
     // Fallback: title-only search
     const { results } = await db
-      .prepare("SELECT no, title, singer FROM tj_songs WHERE title LIKE ?")
-      .bind(`%${query}%`)
+      .prepare("SELECT no, title, singer FROM tj_songs WHERE title LIKE ? ESCAPE '\\'")
+      .bind(`%${escapeLike(query)}%`)
       .all<{ no: string; title: string; singer: string }>();
 
     if (!results || results.length === 0) return null;
@@ -137,7 +142,8 @@ export async function saveTJResults(
 
   try {
     const stmt = db.prepare(
-      "INSERT OR IGNORE INTO tj_songs (no, title, singer) VALUES (?, ?, ?)",
+      `INSERT INTO tj_songs (no, title, singer) VALUES (?, ?, ?)
+       ON CONFLICT(no) DO UPDATE SET title = excluded.title, singer = excluded.singer`,
     );
     const batch = results.map((r) => stmt.bind(r.no, r.title, r.singer));
     await db.batch(batch);
@@ -191,13 +197,14 @@ export async function searchTJSongs(
   limit: number = 20,
 ): Promise<{ no: string; title: string; titleKo: string | null; singer: string; singerKo: string | null }[]> {
   try {
+    const escaped = escapeLike(query);
     const { results } = await db
       .prepare(
         `SELECT no, title, title_ko as titleKo, singer, singer_ko as singerKo FROM tj_songs
-         WHERE title LIKE ? OR title_ko LIKE ? OR singer LIKE ? OR singer_ko LIKE ?
+         WHERE title LIKE ? ESCAPE '\\' OR title_ko LIKE ? ESCAPE '\\' OR singer LIKE ? ESCAPE '\\' OR singer_ko LIKE ? ESCAPE '\\'
          LIMIT ?`,
       )
-      .bind(`%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`, limit)
+      .bind(`%${escaped}%`, `%${escaped}%`, `%${escaped}%`, `%${escaped}%`, limit)
       .all<{ no: string; title: string; titleKo: string | null; singer: string; singerKo: string | null }>();
     return results ?? [];
   } catch {

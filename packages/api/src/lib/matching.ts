@@ -5,6 +5,15 @@ import { MATCH_THRESHOLD } from "./constants";
 // Matches CJK Unified Ideographs, Hiragana, Katakana, Hangul
 const CJK_RE = /[\u3000-\u9fff\uac00-\ud7af\uff00-\uffef]/;
 
+/** CJK chars carry more info per character; count them as 2 for uniqueness checks */
+function effectiveLength(s: string): number {
+  let count = 0;
+  for (const c of s) {
+    count += CJK_RE.test(c) ? 2 : c.trim() ? 1 : 0;
+  }
+  return count;
+}
+
 export function normalizeTitle(raw: string): string {
   let s = raw;
   s = s.replace(
@@ -122,8 +131,13 @@ export function findBestMatch(
   }
 
   // Reject if artist was provided but best artist similarity is very low
+  // Exception: allow when title is highly unique (long, exact match, single candidate)
   if (normArtist && bestArtistScore < 0.35) {
-    return null;
+    const titleScore = (bestScore - 0.4 * bestArtistScore) / 0.6;
+    const singleCandidate = secondBestScore === 0;
+    if (!(titleScore >= 0.9 && singleCandidate && effectiveLength(normTitle) >= 6)) {
+      return null;
+    }
   }
 
   return bestMatch;

@@ -22,7 +22,7 @@ app.use(
     origin: (origin) => {
       if (!origin) return origin;
       if (
-        origin.endsWith(".github.io") ||
+        origin === "https://junbongpark.github.io" ||
         origin.startsWith("http://localhost:")
       ) {
         return origin;
@@ -233,45 +233,65 @@ export default {
     if (!kv) return;
 
     // Crawl TJ website and populate D1 database
-    if (env.TJ_DB) {
-      await crawlTJ(env.TJ_DB, kv);
+    try {
+      if (env.TJ_DB) {
+        await crawlTJ(env.TJ_DB, kv);
+      }
+    } catch (e) {
+      console.error("Scheduled: crawlTJ failed", e);
     }
 
     // Sync J-pop releases from Mastodon bot
-    if (env.TJ_DB) {
-      await syncJpopReleases(env.TJ_DB, kv, env.DEEPL_API_KEY);
+    try {
+      if (env.TJ_DB) {
+        await syncJpopReleases(env.TJ_DB, kv, env.DEEPL_API_KEY);
+      }
+    } catch (e) {
+      console.error("Scheduled: syncJpopReleases failed", e);
     }
 
     // Ensure ko columns exist + populate singer_ko from mapping
-    if (env.TJ_DB) {
-      await ensureKoColumns(env.TJ_DB);
-      await updateSingerKoBatch(env.TJ_DB);
+    try {
+      if (env.TJ_DB) {
+        await ensureKoColumns(env.TJ_DB);
+        await updateSingerKoBatch(env.TJ_DB);
+      }
+    } catch (e) {
+      console.error("Scheduled: ko columns update failed", e);
     }
 
     // Batch translate untranslated J-pop songs
-    if (env.TJ_DB && env.DEEPL_API_KEY) {
-      const untranslated = await getUntranslatedJpopSongs(env.TJ_DB, 50);
-      if (untranslated.length > 0) {
-        const titles = untranslated.map((s) => s.title);
-        const translated = await translateToKorean(titles, env.DEEPL_API_KEY);
-        const updates: { no: string; titleKo: string }[] = [];
-        for (let i = 0; i < untranslated.length; i++) {
-          if (translated[i] !== titles[i]) {
-            updates.push({ no: untranslated[i].no, titleKo: translated[i] });
+    try {
+      if (env.TJ_DB && env.DEEPL_API_KEY) {
+        const untranslated = await getUntranslatedJpopSongs(env.TJ_DB, 50);
+        if (untranslated.length > 0) {
+          const titles = untranslated.map((s) => s.title);
+          const translated = await translateToKorean(titles, env.DEEPL_API_KEY);
+          const updates: { no: string; titleKo: string }[] = [];
+          for (let i = 0; i < untranslated.length; i++) {
+            if (translated[i] !== titles[i]) {
+              updates.push({ no: untranslated[i].no, titleKo: translated[i] });
+            }
+          }
+          if (updates.length > 0) {
+            await updateTitleKoBatch(env.TJ_DB, updates);
           }
         }
-        if (updates.length > 0) {
-          await updateTitleKoBatch(env.TJ_DB, updates);
-        }
       }
+    } catch (e) {
+      console.error("Scheduled: translation batch failed", e);
     }
 
     const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
     // Precache popular artist catalogs
-    for (const artist of POPULAR_ARTISTS) {
-      await fetchMananaRaw(`singer/${encodeURIComponent(artist)}.json`, kv);
-      await delay(200);
+    try {
+      for (const artist of POPULAR_ARTISTS) {
+        await fetchMananaRaw(`singer/${encodeURIComponent(artist)}.json`, kv);
+        await delay(200);
+      }
+    } catch (e) {
+      console.error("Scheduled: artist precache failed", e);
     }
 
     // Fetch recent monthly releases and precache those artists
