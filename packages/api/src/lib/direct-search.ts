@@ -84,6 +84,8 @@ export function matchDirect(
   const allArtistNames = [normArtist, ...(artistAliases ?? []).map((a) => a.toLowerCase())];
   let best: KaraokeMatch | null = null;
   let bestScore = 0;
+  let secondBestScore = 0;
+  let bestArtistScore = 0;
 
   for (const r of results) {
     // Strip parenthetical metadata from DB titles (e.g. "Lemon(ドラマ'...' OST)")
@@ -93,8 +95,10 @@ export function matchDirect(
     const titleScore = similarity(normTitle, entryTitle);
 
     let artistScore = 0;
+    let bestArtistRaw = 0;
     if (!normArtist) {
       artistScore = 0.5;
+      bestArtistRaw = 0.5;
     } else {
       // Try all known names for this artist and pick best match
       for (const name of allArtistNames) {
@@ -104,8 +108,10 @@ export function matchDirect(
         const singerIsCJK = isCJK(entrySinger);
         const crossScript =
           (nameIsLatin && singerIsCJK) || (nameIsCJK && singerIsLatin);
-        const score = crossScript ? 0 : similarity(name, entrySinger);
+        const raw = similarity(name, entrySinger);
+        const score = crossScript ? raw * 0.1 : raw;
         if (score > artistScore) artistScore = score;
+        if (raw > bestArtistRaw) bestArtistRaw = raw;
       }
     }
 
@@ -114,15 +120,32 @@ export function matchDirect(
       : titleScore;
 
     if (combined > bestScore) {
+      secondBestScore = bestScore;
       bestScore = combined;
+      bestArtistScore = bestArtistRaw;
       best = {
         no: r.no,
         matchedTitle: r.title,
         matchedSinger: r.singer,
         score: combined,
       };
+    } else if (combined > secondBestScore) {
+      secondBestScore = combined;
     }
   }
 
-  return best && bestScore >= 0.5 ? best : null;
+  if (!best || bestScore < 0.5) return null;
+
+  // Ambiguity rejection: if top 2 scores are within 0.05, we can't differentiate
+  if (normArtist && secondBestScore > 0 && bestScore - secondBestScore < 0.05) {
+    return null;
+  }
+
+  // Reject if artist was provided but best artist similarity is very low
+  // (title matched but wrong artist — e.g. "踊" exists by Vaundy but we want Ado)
+  if (normArtist && bestArtistScore < 0.35) {
+    return null;
+  }
+
+  return best;
 }

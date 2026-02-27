@@ -98,6 +98,23 @@ export async function searchTJFromDB(
   if (!query) return null;
 
   try {
+    // Try title + singer first for precise matching
+    const allNames = [artist, ...(artistAliases ?? [])].filter(Boolean);
+    if (allNames.length > 0) {
+      const singerClauses = allNames.map(() => "singer LIKE ?").join(" OR ");
+      const sql = `SELECT no, title, singer FROM tj_songs WHERE title LIKE ? AND (${singerClauses})`;
+      const binds = [`%${query}%`, ...allNames.map((n) => `%${n}%`)];
+      const { results: precise } = await db
+        .prepare(sql)
+        .bind(...binds)
+        .all<{ no: string; title: string; singer: string }>();
+
+      if (precise && precise.length > 0) {
+        return matchDirect(title, artist, precise, artistAliases);
+      }
+    }
+
+    // Fallback: title-only search
     const { results } = await db
       .prepare("SELECT no, title, singer FROM tj_songs WHERE title LIKE ?")
       .bind(`%${query}%`)

@@ -65,6 +65,7 @@ export function findBestMatch(
   let bestMatch: KaraokeMatch | null = null;
   let bestScore = 0;
   let secondBestScore = 0;
+  let bestArtistScore = 0;
 
   for (const entry of candidates) {
     const entryTitle = entry.title.normalize("NFC").toLowerCase();
@@ -72,9 +73,11 @@ export function findBestMatch(
 
     const titleScore = similarity(normTitle, entryTitle);
     let artistScore: number;
+    let bestArtistRaw = 0;
 
     if (!normArtist) {
       artistScore = 0.5;
+      bestArtistRaw = 0.5;
     } else {
       // Try all known names for this artist and pick best match
       artistScore = 0;
@@ -85,8 +88,10 @@ export function findBestMatch(
         const singerIsCJK = isCJK(entrySinger);
         const crossScript =
           (nameIsLatin && singerIsCJK) || (nameIsCJK && singerIsLatin);
-        const score = crossScript ? 0 : similarity(name, entrySinger);
+        const raw = similarity(name, entrySinger);
+        const score = crossScript ? raw * 0.1 : raw;
         if (score > artistScore) artistScore = score;
+        if (raw > bestArtistRaw) bestArtistRaw = raw;
       }
     }
 
@@ -97,6 +102,7 @@ export function findBestMatch(
     if (combined > bestScore) {
       secondBestScore = bestScore;
       bestScore = combined;
+      bestArtistScore = bestArtistRaw;
       bestMatch = {
         no: entry.no,
         matchedTitle: entry.title,
@@ -110,21 +116,14 @@ export function findBestMatch(
 
   if (!bestMatch || bestScore < MATCH_THRESHOLD) return null;
 
-  // If artist score was meaningful (same script), accept
-  // If cross-script but only one candidate with high title score, accept
-  // If cross-script and multiple candidates tie (within 0.05), reject — ambiguous
-  if (secondBestScore > 0 && bestScore - secondBestScore < 0.05) {
-    // Multiple candidates with essentially the same score — ambiguous match
-    // Only reject if ALL artist names are cross-script (couldn't differentiate)
-    const matchSinger = bestMatch.matchedSinger.toLowerCase();
-    const singerIsLatin = isLatin(matchSinger);
-    const singerIsCJK = isCJK(matchSinger);
-    const allCrossScript = allArtistNames.every((name) => {
-      const nameIsLatin = isLatin(name);
-      const nameIsCJK = isCJK(name);
-      return (nameIsLatin && singerIsCJK) || (nameIsCJK && singerIsLatin);
-    });
-    if (allCrossScript) return null;
+  // Ambiguity rejection: if top 2 scores are within 0.05, we can't differentiate
+  if (normArtist && secondBestScore > 0 && bestScore - secondBestScore < 0.05) {
+    return null;
+  }
+
+  // Reject if artist was provided but best artist similarity is very low
+  if (normArtist && bestArtistScore < 0.35) {
+    return null;
   }
 
   return bestMatch;
