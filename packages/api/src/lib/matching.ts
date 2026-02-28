@@ -3,10 +3,10 @@ import { MananaEntry, KaraokeMatch } from "./types";
 import { MATCH_THRESHOLD } from "./constants";
 
 // Matches CJK Unified Ideographs, Hiragana, Katakana, Hangul
-const CJK_RE = /[\u3000-\u9fff\uac00-\ud7af\uff00-\uffef]/;
+export const CJK_RE = /[\u3000-\u9fff\uac00-\ud7af\uff00-\uffef]/;
 
 /** CJK chars carry more info per character; count them as 2 for uniqueness checks */
-function effectiveLength(s: string): number {
+export function effectiveLength(s: string): number {
   let count = 0;
   for (const c of s) {
     count += CJK_RE.test(c) ? 2 : c.trim() ? 1 : 0;
@@ -17,7 +17,7 @@ function effectiveLength(s: string): number {
 export function normalizeTitle(raw: string): string {
   let s = raw;
   s = s.replace(
-    /\s*\((?:Official\s*(?:Video|Audio|MV|Music\s*Video|Lyric\s*Video)|feat\..*?|Feat\..*?|ft\..*?|with\s+.*?|Remix|Live|Acoustic|Ver\.|Version|Remaster(?:ed)?|Deluxe|Bonus\s*Track|from\s+".*?")\)/gi,
+    /\s*\((?:Official\s*(?:Video|Audio|MV|Music\s*Video|Lyric\s*Video)|feat\..*?|Feat\..*?|ft\..*?|with\s+.*?|(?:[\w\s]+\s+)?Remix|(?:[\w\s]+\s+)?(?:Live|Acoustic)|(?:Japanese|Korean|English|Chinese|Original)\s+Ver(?:sion|\.)?|Ver\.|Version|Remaster(?:ed)?|Deluxe|Bonus\s*Track|from\s+".*?"|[Pp]rod\.?\s*(?:by\s+)?.*?|TV[ア-ヶ]*.*?|ドラマ.*?|アニメ.*?|映画.*?|主題歌|挿入歌|OST|OP\d*|ED\d*)\)/gi,
     "",
   );
   s = s.replace(/\s*\[.*?\]/g, "");
@@ -34,8 +34,10 @@ export function normalizeTitle(raw: string): string {
 
 export function normalizeArtist(raw: string): string {
   let s = raw;
-  s = s.split(/[,&\/]|\bfeat\.?\b|\bft\.?\b|\bx\b/i)[0].trim();
+  s = s.split(/[,&\/]|\bfeat\.?\b|\bft\.?\b/i)[0].trim();
   s = s.replace(/\s*- Topic$/, "").replace(/\s*- 토픽$/, "");
+  // Strip trailing parenthetical disambiguation (e.g. "V (BTS)", "IU (아이유)")
+  s = s.replace(/\s*\([^)]*\)\s*$/, "").trim();
   s = s.normalize("NFC");
   return s;
 }
@@ -50,14 +52,14 @@ export function similarity(a: string, b: string): number {
 }
 
 /** Check if a string is primarily Latin (ASCII letters) */
-function isLatin(s: string): boolean {
+export function isLatin(s: string): boolean {
   const letters = s.replace(/[\s\d\W]/g, "");
   if (!letters) return false;
   return /^[a-zA-Z]+$/.test(letters);
 }
 
 /** Check if a string contains CJK characters */
-function isCJK(s: string): boolean {
+export function isCJK(s: string): boolean {
   return CJK_RE.test(s);
 }
 
@@ -131,11 +133,13 @@ export function findBestMatch(
   }
 
   // Reject if artist was provided but best artist similarity is very low
-  // Exception: allow when title is highly unique (long, exact match, single candidate)
+  // Exception: allow when title is highly unique (exact match, single candidate)
   if (normArtist && bestArtistScore < 0.35) {
     const titleScore = (bestScore - 0.4 * bestArtistScore) / 0.6;
     const singleCandidate = secondBestScore === 0;
-    if (!(titleScore >= 0.9 && singleCandidate && effectiveLength(normTitle) >= 6)) {
+    // Near-exact title matches (>= 0.95) are trusted even for short CJK titles like "踊"
+    const lenThreshold = titleScore >= 0.95 ? 2 : 6;
+    if (!(titleScore >= 0.9 && singleCandidate && effectiveLength(normTitle) >= lenThreshold)) {
       return null;
     }
   }

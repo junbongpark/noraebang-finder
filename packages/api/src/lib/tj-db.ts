@@ -107,7 +107,7 @@ export async function searchTJFromDB(
     const allNames = [artist, ...(artistAliases ?? [])].filter(Boolean);
     if (allNames.length > 0) {
       const singerClauses = allNames.map(() => "singer LIKE ? ESCAPE '\\'").join(" OR ");
-      const sql = `SELECT no, title, singer FROM tj_songs WHERE title LIKE ? ESCAPE '\\' AND (${singerClauses})`;
+      const sql = `SELECT no, title, singer FROM tj_songs WHERE title LIKE ? ESCAPE '\\' AND (${singerClauses}) ORDER BY length(title) ASC LIMIT 100`;
       const binds = [`%${escapeLike(query)}%`, ...allNames.map((n) => `%${escapeLike(n)}%`)];
       const { results: precise } = await db
         .prepare(sql)
@@ -121,7 +121,7 @@ export async function searchTJFromDB(
 
     // Fallback: title-only search
     const { results } = await db
-      .prepare("SELECT no, title, singer FROM tj_songs WHERE title LIKE ? ESCAPE '\\'")
+      .prepare("SELECT no, title, singer FROM tj_songs WHERE title LIKE ? ESCAPE '\\' ORDER BY length(title) ASC LIMIT 100")
       .bind(`%${escapeLike(query)}%`)
       .all<{ no: string; title: string; singer: string }>();
 

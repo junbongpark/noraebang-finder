@@ -1,5 +1,5 @@
 import { KaraokeMatch } from "./types";
-import { normalizeTitle, normalizeArtist, similarity } from "./matching";
+import { normalizeTitle, normalizeArtist, similarity, CJK_RE, isLatin, isCJK, effectiveLength } from "./matching";
 
 interface DirectResult {
   no: string;
@@ -55,27 +55,6 @@ export function parseTJResults(html: string): DirectResult[] {
     results.push({ no: nums[i], title: titles[i], singer: singers[i] });
   }
   return results;
-}
-
-const CJK_RE = /[\u3000-\u9fff\uac00-\ud7af\uff00-\uffef]/;
-
-function isLatin(s: string): boolean {
-  const letters = s.replace(/[\s\d\W]/g, "");
-  if (!letters) return false;
-  return /^[a-zA-Z]+$/.test(letters);
-}
-
-function isCJK(s: string): boolean {
-  return CJK_RE.test(s);
-}
-
-/** CJK chars carry more info per character; count them as 2 for uniqueness checks */
-function effectiveLength(s: string): number {
-  let count = 0;
-  for (const c of s) {
-    count += CJK_RE.test(c) ? 2 : c.trim() ? 1 : 0;
-  }
-  return count;
 }
 
 function stripHtml(s: string): string {
@@ -154,11 +133,13 @@ export function matchDirect(
 
   // Reject if artist was provided but best artist similarity is very low
   // (title matched but wrong artist — e.g. "踊" exists by Vaundy but we want Ado)
-  // Exception: allow when title is highly unique (long, exact match, single candidate)
+  // Exception: allow when title is highly unique (exact match, single candidate)
   if (normArtist && bestArtistScore < 0.35) {
     const titleScore = (bestScore - 0.4 * bestArtistScore) / 0.6;
     const singleCandidate = secondBestScore === 0;
-    if (!(titleScore >= 0.9 && singleCandidate && effectiveLength(normTitle) >= 6)) {
+    // Near-exact title matches (>= 0.95) are trusted even for short CJK titles like "踊"
+    const lenThreshold = titleScore >= 0.95 ? 2 : 6;
+    if (!(titleScore >= 0.9 && singleCandidate && effectiveLength(normTitle) >= lenThreshold)) {
       return null;
     }
   }

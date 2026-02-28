@@ -42,12 +42,12 @@ const ARTIST_ALIASES: Record<string, string[]> = {
   taeyeon: ["태연"],
   rosé: ["로제"],
   rose: ["로제"],
-  jimin: ["지민"],
-  jungkook: ["정국"],
-  suga: ["슈가"],
-  v: ["뷔"],
-  rm: ["RM"],
-  jhope: ["제이홉"],
+  jimin: ["지민", "박지민"],
+  jungkook: ["정국", "전정국"],
+  suga: ["슈가", "민윤기", "Agust D"],
+  v: ["뷔", "김태형"],
+  rm: ["김남준"],
+  jhope: ["제이홉", "정호석"],
   "j-hope": ["제이홉"],
   lisa: ["리사", "リサ", "LiSA"],
   jennie: ["제니"],
@@ -147,12 +147,17 @@ export async function fetchMananaRaw(
 
 function getAliases(artist: string): string[] {
   const normArtist = normalizeArtist(artist).toLowerCase();
-  return ARTIST_ALIASES[normArtist] ?? [];
+  const hardAliases = ARTIST_ALIASES[normArtist] ?? [];
+  // Extract parenthetical content as additional alias (e.g. "V (BTS)" → "BTS")
+  const parenMatch = artist.match(/\(([^)]+)\)/);
+  const parenAlias = parenMatch ? [parenMatch[1]] : [];
+  return [...hardAliases, ...parenAlias];
 }
 
 function matchFromEntries(
   track: PlaylistTrack,
   entries: MananaEntry[],
+  extraAliases?: string[],
 ): KaraokeResult {
   const result: KaraokeResult = {
     title: track.title,
@@ -163,7 +168,7 @@ function matchFromEntries(
   };
   if (entries.length === 0) return result;
 
-  const aliases = getAliases(track.artist);
+  const aliases = [...getAliases(track.artist), ...(extraAliases ?? [])];
   const tjEntries = entries.filter((e) => e.brand === "tj");
   const kyEntries = entries.filter((e) => e.brand === "kumyoung");
   const jsEntries = entries.filter((e) => e.brand === "joysound");
@@ -178,9 +183,10 @@ function fillMissing(
   result: KaraokeResult,
   track: PlaylistTrack,
   entries: MananaEntry[],
+  extraAliases?: string[],
 ) {
   if (entries.length === 0) return;
-  const aliases = getAliases(track.artist);
+  const aliases = [...getAliases(track.artist), ...(extraAliases ?? [])];
   const tjEntries = entries.filter((e) => e.brand === "tj");
   const kyEntries = entries.filter((e) => e.brand === "kumyoung");
   const jsEntries = entries.filter((e) => e.brand === "joysound");
@@ -305,7 +311,6 @@ export async function lookupKaraokeBatch(
   );
 
   if (bulkArtists.length > 0) {
-    const prefetchTasks: Promise<void>[] = [];
     let prefetchIdx = 0;
 
     const prefetchWorkers = Array.from(
@@ -321,9 +326,11 @@ export async function lookupKaraokeBatch(
             kv,
           );
 
-          // Also try aliases
-          const aliases =
-            ARTIST_ALIASES[artist.toLowerCase()] ?? [];
+          // Also try aliases (hardcoded + MusicBrainz)
+          let aliases = ARTIST_ALIASES[artist.toLowerCase()] ?? [];
+          if (aliases.length === 0) {
+            aliases = await lookupArtistAliases(artist, kv);
+          }
           let allEntries = artistEntries;
           for (const alias of aliases) {
             const aliasEntries = await cache.fetch(
@@ -337,7 +344,7 @@ export async function lookupKaraokeBatch(
 
           // Match all tracks from this artist against the catalog
           for (const idx of indices) {
-            const result = matchFromEntries(tracks[idx], allEntries);
+            const result = matchFromEntries(tracks[idx], allEntries, aliases);
             // Only mark as resolved if at least one brand matched
             if (result.tj || result.ky || result.joysound) {
               results[idx] = result;
@@ -393,7 +400,24 @@ export async function lookupKaraokeStream(
   const resolved = new Set<number>();
 
   // Phase A: Cache-only lookup (no network) — parallel KV lookups
+  // Also resolve MusicBrainz aliases per unique artist (cached in KV)
+  const mbAliasCache = new Map<string, string[]>();
   if (kv) {
+    // Pre-resolve MusicBrainz aliases for unique artists
+    const uniqueArtists = new Set<string>();
+    for (const track of tracks) {
+      const normArtist = normalizeArtist(track.artist).toLowerCase();
+      if (normArtist && !(ARTIST_ALIASES[normArtist]?.length)) {
+        uniqueArtists.add(normArtist);
+      }
+    }
+    await Promise.all(
+      [...uniqueArtists].map(async (artist) => {
+        const mbAliases = await lookupArtistAliases(artist, kv);
+        if (mbAliases.length > 0) mbAliasCache.set(artist, mbAliases);
+      }),
+    );
+
     await Promise.all(
       tracks.map(async (track, i) => {
         const normTitle = normalizeTitle(track.title);
@@ -402,7 +426,9 @@ export async function lookupKaraokeStream(
         const songKey = `manana:song/${encodeURIComponent(normTitle)}.json`;
         const singerKey = `manana:singer/${encodeURIComponent(normArtist)}.json`;
 
-        const aliases = ARTIST_ALIASES[normArtist.toLowerCase()] ?? [];
+        const hardAliases = ARTIST_ALIASES[normArtist.toLowerCase()] ?? [];
+        const mbAliases = mbAliasCache.get(normArtist.toLowerCase()) ?? [];
+        const aliases = [...hardAliases, ...mbAliases];
         const aliasKeys = aliases.map(
           (a) => `manana:singer/${encodeURIComponent(a)}.json`,
         );
@@ -424,7 +450,7 @@ export async function lookupKaraokeStream(
         }
 
         if (allEntries.length > 0) {
-          const result = matchFromEntries(track, allEntries);
+          const result = matchFromEntries(track, allEntries, aliases);
           if (result.tj || result.ky || result.joysound) {
             resolved.add(i);
             await onResult(i, result);
@@ -463,7 +489,10 @@ export async function lookupKaraokeStream(
             kv,
           );
 
-          const aliases = ARTIST_ALIASES[artist.toLowerCase()] ?? [];
+          let aliases = ARTIST_ALIASES[artist.toLowerCase()] ?? [];
+          if (aliases.length === 0) {
+            aliases = await lookupArtistAliases(artist, kv);
+          }
           let allEntries = artistEntries;
           for (const alias of aliases) {
             const aliasEntries = await cache.fetch(
@@ -476,10 +505,14 @@ export async function lookupKaraokeStream(
           }
 
           for (const idx of indices) {
-            const result = matchFromEntries(tracks[idx], allEntries);
-            // Only mark resolved if at least one brand matched
+            const result = matchFromEntries(tracks[idx], allEntries, aliases);
             if (result.tj || result.ky || result.joysound) {
               resolved.add(idx);
+              // D1 fallback for missing TJ
+              if (!result.tj && db) {
+                const normTitle = normalizeTitle(tracks[idx].title);
+                result.tj = await searchTJFromDB(db, normTitle, tracks[idx].artist, aliases);
+              }
               await onResult(idx, result);
             }
           }
