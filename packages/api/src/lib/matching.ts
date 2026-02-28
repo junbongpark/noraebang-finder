@@ -34,7 +34,7 @@ export function normalizeTitle(raw: string): string {
 
 export function normalizeArtist(raw: string): string {
   let s = raw;
-  s = s.split(/[,&\/]|\bfeat\.?\b|\bft\.?\b/i)[0].trim();
+  s = s.split(/[,&]|\s+\/\s+|\bfeat\.?\b|\bft\.?\b/i)[0].trim();
   s = s.replace(/\s*- Topic$/, "").replace(/\s*- 토픽$/, "");
   // Strip trailing parenthetical disambiguation (e.g. "V (BTS)", "IU (아이유)")
   s = s.replace(/\s*\([^)]*\)\s*$/, "").trim();

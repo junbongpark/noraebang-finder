@@ -73,8 +73,11 @@ export async function lookupArtistAliases(
     // Collect useful aliases: the primary name + CJK aliases
     const aliases = new Set<string>();
 
-    // Primary name (often the native-script name)
+    // Primary name (often the native-script name, or exact capitalization)
     if (CJK_RE.test(best.name)) {
+      aliases.add(best.name);
+    } else if (best.name.toLowerCase() !== normalized) {
+      // Add primary name if it differs from input (e.g., exact capitalization)
       aliases.add(best.name);
     }
 

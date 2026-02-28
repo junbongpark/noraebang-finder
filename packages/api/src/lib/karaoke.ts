@@ -49,7 +49,7 @@ const ARTIST_ALIASES: Record<string, string[]> = {
   rm: ["김남준"],
   jhope: ["제이홉", "정호석"],
   "j-hope": ["제이홉"],
-  lisa: ["리사", "リサ", "LiSA"],
+  lisa: ["리사"],
   jennie: ["제니"],
   hwasa: ["화사"],
   // Jpop artist aliases (romaji → Japanese)
@@ -77,6 +77,27 @@ const ARTIST_ALIASES: Record<string, string[]> = {
   "one ok rock": ["ONE OK ROCK"],
   "creepy nuts": ["Creepy Nuts"],
   "hoshino gen": ["星野源"],
+  vaundy: ["Vaundy"],
+  kanaria: ["Kanaria"],
+  milet: ["milet"],
+  "tani yuuki": ["Tani Yuuki"],
+  "man with a mission": ["MAN WITH A MISSION"],
+  "sekai no owari": ["SEKAI NO OWARI", "世界の終わり"],
+  amazarashi: ["amazarashi"],
+  dustcell: ["DUSTCELL"],
+  tuyu: ["TUYU", "ツユ"],
+  "dish//": ["DISH//"],
+  yama: ["yama"],
+  sumika: ["sumika"],
+  // Reverse aliases (CJK → romaji) for when Spotify returns CJK artist names
+  "ヨルシカ": ["Yorushika"],
+  "あいみょん": ["Aimyon"],
+  "優里": ["Yuuri"],
+  "米津玄師": ["Kenshi Yonezu"],
+  "藤井風": ["Fujii Kaze"],
+  "星野源": ["Hoshino Gen"],
+  "椎名林檎": ["Sheena Ringo"],
+  "宇多田ヒカル": ["Hikaru Utada"],
 };
 
 /** In-memory dedup cache for a single batch run */
