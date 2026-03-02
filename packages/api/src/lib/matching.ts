@@ -21,6 +21,8 @@ export function normalizeTitle(raw: string): string {
     "",
   );
   s = s.replace(/\s*\[.*?\]/g, "");
+  // Strip katakana middle dots (e.g. "スウィート・ソウル・レヴュー" → "スウィートソウルレヴュー")
+  s = s.replace(/\u30FB/g, "");
   // YouTube Music often appends " - English Title" to CJK titles (e.g. "アイドル - Idol")
   // Strip the English suffix if the part before the dash contains CJK characters
   const dashIdx = s.indexOf(" - ");
@@ -34,7 +36,7 @@ export function normalizeTitle(raw: string): string {
 
 export function normalizeArtist(raw: string): string {
   let s = raw;
-  s = s.split(/[,&]|\s+\/\s+|\bfeat\.?\b|\bft\.?\b/i)[0].trim();
+  s = s.split(/[,&]|\s+\/\s+|\bfeat(?:uring)?\.?\b|\bft\.?\b/i)[0].trim();
   s = s.replace(/\s*- Topic$/, "").replace(/\s*- 토픽$/, "");
   // Strip trailing parenthetical disambiguation (e.g. "V (BTS)", "IU (아이유)")
   s = s.replace(/\s*\([^)]*\)\s*$/, "").trim();

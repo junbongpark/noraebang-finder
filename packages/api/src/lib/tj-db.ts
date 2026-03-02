@@ -73,6 +73,13 @@ const SINGER_KO_MAP: Record<string, string> = {
   "GLAY": "글레이",
   "L'Arc~en~Ciel": "라르크 앙 시엘",
   "X JAPAN": "엑스 재팬",
+  "東京事変": "도쿄지헨",
+  "サンボマスター": "삼보마스터",
+  "SHISHAMO": "시샤모",
+  "カネコアヤノ": "카네코 아야노",
+  "キリンジ": "키린지",
+  "ピチカート・ファイヴ": "피치카토 파이브",
+  "ASIAN KUNG-FU GENERATION": "아시안 쿵푸 제너레이션",
 };
 
 /** Batch update singer_ko from mapping table */
